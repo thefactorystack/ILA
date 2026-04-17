@@ -1,1 +1,31 @@
-git clone https://x-access-token:${{ secrets.DOCS_TOKEN }}@github.com/thefactorystack/ila-docs.git
+name: Build and Deploy to ila-docs
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - run: pip install mkdocs mkdocs-material pymdown-extensions
+      - run: mkdocs build
+      - name: Deploy
+        env:
+          TOKEN: ${{ secrets.DOCS_TOKEN }}
+        run: |
+          cd /tmp
+          git clone https://x-access-token:${TOKEN}@github.com/thefactorystack/ila-docs.git
+          cd ila-docs
+          rm -rf *
+          cp -r $GITHUB_WORKSPACE/site/* .
+          git config user.name "bot"
+          git config user.email "bot@example.com"
+          git add -A
+          git commit -m "docs" || true
+          git push
