@@ -9,10 +9,34 @@ edit_uri: edit/main/docs/
 theme:
   name: material
   palette:
-    - scheme: light
-      primary: deep-orange
-      accent: deep-orange
+    # Dark mode (default)
+    - scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-7
+        name: Switch to light mode
+    # Light mode fallback
+    - scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-4
+        name: Switch to dark mode
+  
+  font:
+    text: Inter
+    code: JetBrains Mono
+  
   language: en
+  
+  features:
+    - navigation.tabs
+    - navigation.top
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - toc.follow
 
 nav:
   - Home: index.md
@@ -30,15 +54,27 @@ nav:
     - Governance: pages/governance.md
 
 markdown_extensions:
-  - toc
+  - toc:
+      permalink: true
   - tables
   - codehilite
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.details
+  - pymdownx.tabbed
+  - attr_list
+  - md_in_html
 
 extra_css:
-  - css/ila.css
+  - css/ila-dark.css
 
 plugins:
   - search
 
-copyright: CC BY 4.0 - Built by Simon Christiansen
+copyright: |
+  <strong>ILA</strong> is published under <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank">CC BY 4.0</a> · 
+  Built by <a href="https://github.com/simonchr" target="_blank">Simon Christiansen</a> · 
+  <a href="https://github.com/thefactorystack/ILA" target="_blank">GitHub</a>
