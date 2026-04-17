@@ -1,0 +1,115 @@
+site_name: Industrial Layered Architecture (ILA)
+site_description: A practical, open framework for structuring the industrial automation stack
+site_author: Simon Christiansen
+site_url: https://thefactorystack.github.io/ILA/
+repo_url: https://github.com/thefactorystack/ILA
+repo_name: thefactorystack/ILA
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  custom_dir: docs/overrides
+  palette:
+    - scheme: light
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: dark
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  font:
+    text: Roboto
+    code: Roboto Mono
+  features:
+    - content.code.copy
+    - content.tabs.link
+    - navigation.instant
+    - navigation.tabs
+    - navigation.top
+    - search.highlight
+    - search.share
+    - search.suggest
+
+plugins:
+  - search:
+      lang: en
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:pymdownx.emoji.twemoji
+      emoji_generator: !!python/name:pymdownx.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.magiclink:
+      repo_url_shorthand: true
+      user: thefactorystack
+      repo: ILA
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.snippets:
+      auto_append:
+        - docs/includes/abbreviations.md
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+nav:
+  - Home: index.md
+  - Overview: pages/01-overview.md
+  - Getting Started: pages/02-getting-started.md
+  - Layers:
+    - Layer 1 — Field: pages/03-layer1-field.md
+    - Layer 2 — Control: pages/04-layer2-control.md
+    - Layer 3 — Supervisory: pages/05-layer3-supervisory.md
+    - Layer 4 — Data: pages/06-layer4-data.md
+    - Layer 5 — OT Platform: pages/07-layer5-otplatform.md
+  - Standards Bridge: pages/08-standards-bridge.md
+  - Community:
+    - Contributing: pages/contributing.md
+    - Governance: pages/governance.md
+
+extra_css:
+  - css/ila.css
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/thefactorystack/ILA
+      name: GitHub
+    - icon: fontawesome/brands/linkedin
+      link: https://linkedin.com/company/thefactorystack
+      name: LinkedIn
+  generator: false
+
+copyright: |
+  <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank">CC BY 4.0</a> · Built by <a href="https://github.com/simonchr" target="_blank">Simon Christiansen</a>
