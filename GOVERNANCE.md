@@ -1,24 +1,25 @@
-# ILA Community Governance
+# ILA Governance
 
-> **Industrial Layered Architecture** — An open, practice-driven framework developed by OT professionals, for OT professionals.
+> **Industrial Layered Architecture** - an open, practice-driven framework developed by OT professionals, automation engineers, maintainers, integrators, and factory technologists.
 
 ---
 
 ## Vision
 
-ILA exists to give every automation technician, PLC programmer, SCADA developer, and OT architect a shared language — a common structure for building factories that are understandable, scalable, and secure.
+ILA exists to give automation technicians, PLC programmers, SCADA developers, data engineers, OT infrastructure specialists, managers, and architects a shared language for building factories that are understandable, scalable, secure, and maintainable.
 
-The framework is free, open, and community-developed. It belongs to the people who use it.
+The framework is free, open, and community-developed. It belongs to the people who use it, challenge it, and improve it.
 
 ---
 
 ## Principles
 
 1. **Openness** — The ILA specification, documentation, and community discussions are publicly accessible to all.
-2. **Practice over theory** — Contributions are grounded in real-world industrial experience.
+2. **Practice over theory** — Contributions are grounded in real-world industrial experience and clear operational value.
 3. **Transparency** — Decisions affecting the framework are made visibly, with documented rationale.
 4. **Respect** — All contributors are treated with professional courtesy regardless of background or experience level.
 5. **Sustainability** — The project is built to last, with governance structures that survive the involvement of any single person.
+6. **Traceability** — Core decisions should be traceable to a problem, standard, field experience, or documented design rationale.
 
 ---
 
@@ -26,7 +27,7 @@ The framework is free, open, and community-developed. It belongs to the people w
 
 ### Founder / Steward
 
-The Founder holds the long-term vision of ILA and is responsible for the integrity of the core specification.
+The Founder holds the long-term vision of ILA and is responsible for the integrity of the Core Specification.
 
 **Responsibilities:**
 - Defining and protecting the ILA Core Specification
@@ -35,7 +36,7 @@ The Founder holds the long-term vision of ILA and is responsible for the integri
 - Representing ILA externally
 
 **Boundaries:**
-The Founder acts as a facilitator and compass-holder — not a dictator. Day-to-day decisions, practical examples, and community contributions are governed collectively. The Founder holds veto rights exclusively over the ILA Core Specification. All other decisions follow the process described in this document.
+The Founder acts as a facilitator and compass-holder, not a dictator. Day-to-day documentation improvements, practical examples, and community contributions are governed collectively. The Founder holds veto rights only over the ILA Core Specification and governance integrity. All other decisions follow the process described in this document.
 
 Current Steward: Simon Christiansen, ILA founder.
 
@@ -43,12 +44,12 @@ Current Steward: Simon Christiansen, ILA founder.
 
 ### Core Contributors
 
-Core Contributors have demonstrated sustained, high-quality contributions to ILA. They are the primary stewards of the framework in practice.
+Core Contributors have demonstrated sustained, high-quality contributions to ILA. They are the primary maintainers of the framework in practice.
 
 **Responsibilities:**
 - Reviewing and merging pull requests in community repositories
 - Participating in RFC discussions and voting
-- Maintaining documentation and reference implementations
+- Maintaining documentation, examples, templates, and reference implementations
 - Mentoring new contributors
 
 **How to become a Core Contributor:**
@@ -58,7 +59,7 @@ Core Contributor status is earned through consistent contribution over time. Any
 
 ### Working Group Leads
 
-Working Groups are formed around specific topics within ILA (e.g., PackML Integration, OT Security, Data Layer standards). Each Working Group is led by a community-appointed lead.
+Working Groups are formed around specific topics within ILA, such as PackML integration, OT security, Layer 4 data contracts, HMI patterns, or industry-specific adaptations. Each Working Group is led by a community-appointed lead.
 
 **Responsibilities:**
 - Driving progress within their working group scope
@@ -88,11 +89,11 @@ There is no application process. Joining the community means agreeing to the Cod
 
 ### ILA Core Specification
 
-Changes to the ILA Core Specification — including layer definitions, naming conventions, and inter-layer rules — follow the RFC process. The Founder holds final decision authority, but rationale is always published.
+Changes to the ILA Core Specification follow the RFC process. This includes layer definitions, naming conventions, inter-layer rules, and governance changes. The Founder holds final decision authority for the core, but rationale is always published.
 
-### Community Repositories (Practical Layer)
+### Practical Documentation and Examples
 
-The Practical Layer repositories (examples, templates, integrations) are governed by Core Contributors. Decisions are made by majority consensus among active Core Contributors. The Founder participates as a contributor, not as final authority.
+Examples, templates, diagrams, industry notes, and implementation guides are governed by Core Contributors. Decisions are made by consensus among active maintainers. The Founder participates as a contributor unless the change affects the Core Specification.
 
 ### Working Group Decisions
 
@@ -109,6 +110,7 @@ The RFC process ensures that significant changes are discussed openly before the
 - Introduction of new layers, rules, or naming conventions
 - Formation of new Working Groups
 - Significant changes to community governance
+- Changes that would make existing ILA-compliant implementations non-compliant
 
 **RFC Lifecycle:**
 
@@ -121,6 +123,14 @@ The RFC process ensures that significant changes are discussed openly before the
 
 All RFCs are stored in `/rfcs` in the main repository. Rejected RFCs are retained for historical reference.
 
+**Decision criteria:**
+
+- Does the proposal solve a real industrial problem?
+- Is it compatible with the five-layer model?
+- Does it align with relevant standards or explain why it departs from them?
+- Can a technician, engineer, and OT architect understand the impact?
+- Does it improve adoption without weakening architectural clarity?
+
 ---
 
 ## Code of Conduct
@@ -131,6 +141,7 @@ ILA is a professional community. All participants are expected to:
 - Assume good faith in others' contributions
 - Keep discussions focused on the work
 - Not use the community for self-promotion unrelated to ILA
+- Separate vendor preference from architectural argument
 
 Violations may result in removal from community spaces at the discretion of Core Contributors or the Founder.
 
@@ -138,7 +149,7 @@ Violations may result in removal from community spaces at the discretion of Core
 
 ## Contribution Guidelines
 
-Detailed contribution guidelines are maintained in `CONTRIBUTING.md`. At a high level:
+Detailed contribution guidelines are maintained in [CONTRIBUTING.md](CONTRIBUTING.md). At a high level:
 
 - All contributions to core repositories are made via pull request
 - Pull requests require review from at least one Core Contributor
@@ -151,7 +162,7 @@ Detailed contribution guidelines are maintained in `CONTRIBUTING.md`. At a high 
 
 ILA is an open framework. The specification and community resources are and will remain free.
 
-Commercial products and services built on ILA — including courses, certifications, consulting, and starter kits — are operated separately and do not affect the openness of the framework. Commercial activity is disclosed transparently.
+Commercial products and services built on ILA, including courses, certifications, consulting, and starter kits, are operated separately and do not affect the openness of the framework. Commercial activity must be disclosed transparently.
 
 Community contributors are never required to contribute to or endorse commercial products.
 
@@ -163,4 +174,4 @@ This governance document may be amended through the RFC process. Any community m
 
 ---
 
-*This document is maintained in the ILA GitHub repository. Last revised: 2026-04-02
+*This document is maintained in the ILA GitHub repository. Last revised: 2026-06-02.*
