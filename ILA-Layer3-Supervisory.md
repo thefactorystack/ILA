@@ -1,16 +1,18 @@
-# ILA Layer 3 — Supervisory
+# ILA Layer 3 - Supervisory
 
-**SCADA, HMI, MES integration points — visualization and operator interaction, not logic.**
+**HMI, SCADA, alarms, operator commands, recipe entry, audit trails, and MES integration points.**
 
 ---
 
 ## Purpose
 
-The Supervisory Layer is the operator's window into the process. It displays state, accepts commands, manages alarms, and provides the interface between human decisions and machine execution. It is governed most directly by **ILA Rule 2: No programming in SCADA.**
+The Supervisory Layer is the operator's window into the process. It displays machine state, captures operator intent, presents alarms, supports recipe entry, records operator actions, and connects production workflows to the control system.
+
+This layer is governed most directly by **ILA Rule 2: No process logic in SCADA.**
 
 This is the layer where the temptation to add "just a little logic" is greatest — and where the cost of doing so is highest.
 
-## What Belongs in Layer 3
+## What Belongs Here
 
 - HMI / SCADA runtime screens
 - Alarm management and notification
@@ -19,31 +21,52 @@ This is the layer where the temptation to add "just a little logic" is greatest 
 - Production dashboards and status overviews
 - MES integration points (work order receipt, production reporting)
 - Audit trails and electronic signatures (where required)
+- Role-based operator access
+- Screen navigation, display formatting, and operator guidance
 
-## What Does NOT Belong in Layer 3
+## What Does Not Belong Here
 
 - Process logic, conditional branching, or calculations that determine machine behavior
 - Timer-based sequencing or interlock logic
 - Direct field device communication bypassing the Control Layer
 - Data aggregation, trending calculations, or report generation (that is Layer 4)
+- Process-critical values stored only in SCADA without a Control Layer source
 
-## ILA Rule 2 — No Programming in SCADA
+## Supervisory Layer Rules
 
-This rule is the defining principle of Layer 3. It exists because logic hidden in SCADA scripts is:
+These rules keep HMI and SCADA focused on operators, visibility, and controlled interaction with the machine.
+
+| Rule | Principle | Meaning |
+|------|-----------|---------|
+| R1 | **Design for stress, not comfort** | Operators use HMI screens during faults, changeovers, alarms, and pressure. If the operator has to think too long, the design has already failed. |
+| R2 | **No process logic. Period.** | If a script controls the process, decides equipment state, or replaces PLC sequencing, it breaks the architecture. SCADA may guide, display, validate input, and capture intent; it must not own machine behavior. |
+| R3 | **UI is for operators, not engineers** | If the screen is not understood within seconds by the intended operator, it is bad design. Engineering detail belongs behind the right diagnostic view, not on the main operating screen. |
+| R4 | **Alarms must be actionable** | Alarm fatigue is real and dangerous. Every alarm should be relevant, prioritized, understandable, and tied to an operator response. Otherwise it should not be an alarm. |
+| R5 | **Consistency beats creativity** | Predictable screens reduce errors. Creative one-off layouts, colors, and navigation patterns introduce risk during abnormal situations. |
+
+## ILA Rule 2 - No Process Logic in SCADA
+
+The short version of the rule is "No programming in SCADA." The precise version is: **no process logic in SCADA.**
+
+This distinction matters. Most SCADA systems contain some scripting or configuration logic for navigation, display, validation, and alarm workflows. That is normal. The architectural problem appears when SCADA scripts decide machine behavior.
+
+Process logic hidden in SCADA scripts is:
 
 - **Invisible** — PLC programmers don't see it during code reviews
 - **Fragile** — SCADA runtime updates can break or change script behavior silently
 - **Unmaintainable** — the next engineer doesn't know to look in SCADA for logic
 - **Untestable** — SCADA scripts rarely have structured testing or simulation
 
-**The test is simple:** If you removed all SCADA scripting and replaced the HMI with a completely different platform, would the machine still function correctly? If the answer is no, you have logic in the wrong layer.
+**The test is simple:** If you replaced the HMI/SCADA platform, would the machine still operate correctly under PLC control? If the answer is no, process logic has leaked into Layer 3.
 
 **What is allowed in SCADA:**
 
-- Display formatting (unit conversion for display purposes, color changes based on state)
+- Display formatting, including unit conversion for display only
 - Navigation logic (screen changes, popup triggers)
 - User input validation at the UI level (numeric range checks before sending to PLC)
 - Alarm acknowledgment and shelving
+- Audit trail capture and electronic signature workflows
+- Operator guidance and help text
 
 **What is NOT allowed in SCADA:**
 
@@ -52,10 +75,11 @@ This rule is the defining principle of Layer 3. It exists because logic hidden i
 - Timer-based operations that affect production
 - Writing directly to field devices (bypassing the PLC)
 - Storing process-critical data only in SCADA (no PLC variable backing it)
+- Retrying work orders indefinitely without exposing the rejection reason
 
 ## Key Standards
 
-### ISA-101 — HMI Design
+### ISA-101 - HMI Design
 
 ISA-101 (Human Machine Interfaces for Process Automation Systems) provides guidelines for designing effective, safe, and consistent operator interfaces.
 
@@ -66,9 +90,9 @@ ISA-101 (Human Machine Interfaces for Process Automation Systems) provides guide
 - Avoid decorative 3D graphics (realistic tank drawings, photographic backgrounds)
 - Display process values with context: current value, setpoint, operating range, alarm limits
 - Use analog indicators (bar graphs, trend sparklines) rather than just numeric displays
-- Navigation should follow the physical plant hierarchy (which aligns with Layer 2 structure — Rule 5)
+- Navigation should follow the physical plant hierarchy, which aligns with Layer 2 structure
 
-**A note on high-performance HMI:** ILA recommends high-performance principles as the default starting point. They are well-supported by research and reduce operator error in alarm-heavy environments. However, operator teams in some facilities have strong preferences shaped by years of experience with specific visual styles. If you deviate from high-performance principles, document the rationale and ensure the deviation is a conscious team decision — not an accident of legacy screen design.
+**A note on high-performance HMI:** ILA recommends high-performance principles as the default starting point. They reduce visual noise and help operators notice abnormal conditions. If a site intentionally deviates because of operator training, regulatory expectations, or existing standards, document the reason. The problem is not deviation; the problem is accidental inconsistency.
 
 **Screen hierarchy (aligned with Rule 5):**
 
@@ -79,7 +103,7 @@ Level 3: Unit Detail        — Single unit, all instruments and controls
 Level 4: Device/Loop Detail — Single control loop, tuning, diagnostics
 ```
 
-**ILA principle:** This screen hierarchy maps directly to the PLC program structure defined in Layer 2. If the PLC has `PRG_Station01`, `PRG_Station02`, and `PRG_Station03`, Layer 3 has corresponding detail screens for each station. No orphan screens. No hidden logic screens.
+**ILA principle:** The screen hierarchy maps to the PLC structure. If the PLC has `PRG_Station01`, `PRG_Station02`, and `PRG_Station03`, Layer 3 should have corresponding operator views. No orphan screens. No hidden process logic screens.
 
 ### PackML HMI State Visualization
 
@@ -102,9 +126,9 @@ PackML provides a standardized way to display machine state on HMI screens. Ever
 | Stopped | Reset |
 | Aborted | Clear |
 
-**ILA principle:** The HMI reads `StateCurrent` from the PLC via OPC UA and enables/disables command buttons accordingly. The button logic is a simple state-to-button map — not a script that evaluates process conditions.
+**ILA principle:** The HMI reads `StateCurrent` from the PLC and displays only valid operator commands for that state. The PLC still validates the command before acting. Button enablement improves usability; it is not the safety or process interlock.
 
-### ISA-88 — Recipe Management at the Supervisory Layer
+### ISA-88 - Recipe Management at the Supervisory Layer
 
 In ISA-88 batch systems, the Supervisory Layer is responsible for:
 
@@ -119,12 +143,12 @@ In ISA-88 batch systems, the Supervisory Layer is responsible for:
 **Workflow:**
 
 ```
-Operator selects recipe          → Layer 3
-Layer 3 sends recipe to PLC     → Layer 2 (via OPC UA)
-PLC validates recipe             → Layer 2 (Rule 5)
-PLC accepts/rejects              → Layer 2
-Layer 3 displays result          → Layer 3
-PLC enters Starting state        → Layer 2 (only if accepted)
+Operator selects recipe         -> Layer 3
+Layer 3 sends recipe to PLC     -> Layer 2
+PLC validates recipe            -> Layer 2
+PLC accepts or rejects          -> Layer 2
+Layer 3 displays result         -> Layer 3
+PLC enters Starting state       -> Layer 2, only if accepted
 ```
 
 ## Alarm Management
@@ -160,9 +184,9 @@ Manufacturing Execution Systems (MES) interface with ILA at Layer 3 as a gateway
 | MES → Layer 3 | Work orders, production schedules | "Produce 1000 units of Product A" |
 | Layer 3 → MES | Production counts, quality data, batch records | "Batch BR001 complete, 998 units produced" |
 
-**ILA principle:** MES integration happens at Layer 3 or Layer 4, never directly to the PLC. The SCADA acts as the translation layer between MES work orders and PLC recipe parameters.
+**ILA principle:** MES integration happens at Layer 3 or Layer 4, never directly to the PLC. Layer 3 translates production intent into operator-visible actions and Control Layer recipe parameters.
 
-**Work order rejection flow:** When the PLC rejects a work order (invalid product code, missing recipe, equipment not available), the rejection must flow back through Layer 3 to MES with a reason code. The MES must not retry indefinitely — the operator and the MES both need to see *why* the order was rejected so the root cause is resolved, not masked by retries.
+**Work order rejection flow:** When the PLC rejects a work order because of an invalid product code, missing recipe, equipment state, or safety condition, the rejection must flow back through Layer 3 to MES with a reason code. MES must not retry indefinitely and hide the root cause.
 
 **ISA-95 activity models:** ISA-95 defines standard activity models for production, quality, maintenance, and inventory operations. When integrating MES at Layer 3, use ISA-95 activity models to structure the data exchange — this makes MES integration vendor-independent and prevents building point-to-point interfaces that break when either system is upgraded.
 
@@ -170,7 +194,7 @@ Manufacturing Execution Systems (MES) interface with ILA at Layer 3 as a gateway
 
 In regulated industries (pharmaceutical, food safety, medical devices), Layer 3 carries additional responsibilities defined by regulatory frameworks.
 
-**FDA 21 CFR Part 11 — Electronic Records and Signatures:**
+**FDA 21 CFR Part 11 - Electronic Records and Signatures:**
 
 When your SCADA system generates electronic records (batch records, quality logs, production reports) or accepts electronic signatures (operator confirmations, recipe approvals), it must comply with 21 CFR Part 11. Key requirements at Layer 3:
 
@@ -179,13 +203,29 @@ When your SCADA system generates electronic records (batch records, quality logs
 - **Access control:** Role-based access must prevent unauthorized changes. An operator who can run the process should not be able to modify recipes. A supervisor who can approve deviations should not be able to delete audit trail entries.
 - **System validation:** The SCADA system must be validated (IQ/OQ/PQ) to demonstrate that it functions as intended and that electronic records are trustworthy.
 
-**ILA principle:** 21 CFR Part 11 compliance is a Layer 3 responsibility — the SCADA platform provides the audit trails, signatures, and access control. The PLC (Layer 2) enforces process logic regardless of regulatory context. Do not implement compliance logic in the PLC; it does not belong there.
+**ILA principle:** 21 CFR Part 11 compliance is primarily a Layer 3 responsibility. SCADA or MES platforms provide audit trails, signatures, access control, and validation evidence. The PLC enforces process behavior regardless of regulatory context.
+
+Do not bury compliance workflows in PLC logic. Do not allow compliance screens to bypass PLC validation.
+
+## Supervisory Design Decisions
+
+Make these decisions explicit:
+
+| Decision | ILA default |
+|----------|-------------|
+| Machine behavior | Decided in Layer 2 |
+| Operator commands | Captured in Layer 3, validated in Layer 2 |
+| Recipe entry | Entered in Layer 3, accepted or rejected in Layer 2 |
+| Alarm detection | Detected in Layer 2 |
+| Alarm presentation | Managed in Layer 3 |
+| Audit trail | Managed in Layer 3 or MES |
+| MES work order handling | Visible, reason-coded, no silent retry loops |
 
 **Other regulatory frameworks:** GMP (Good Manufacturing Practice), IEC 62304 (medical device software), and EU Annex 11 (computerized systems in pharmaceutical) impose similar requirements. The pattern is the same: audit, authenticate, validate — and keep all of it at Layer 3, not buried in PLC logic.
 
 ## Practical Checklist
 
-- [ ] Zero process logic exists in SCADA scripts (Rule 2 — verified by review)
+- [ ] Zero process logic exists in SCADA scripts (Rule 2 - verified by review)
 - [ ] HMI screen hierarchy mirrors the PLC program structure (Rule 5)
 - [ ] PackML faceplate shows current state, available commands, and mode
 - [ ] Command buttons are state-dependent (not always-enabled)
@@ -199,7 +239,8 @@ When your SCADA system generates electronic records (batch records, quality logs
 - [ ] *Regulated:* Electronic signatures are linked to specific records with signer identity
 - [ ] *Regulated:* Role-based access control prevents unauthorized changes
 - [ ] *Regulated:* SCADA system is validated (IQ/OQ/PQ) if generating electronic records
+- [ ] Exceptions are documented where legacy SCADA contains unavoidable behavior
 
 ---
 
-*Back to [ILA Overview](01-overview.md) | Previous: [Layer 2 — Control](04-layer2-control.md) | Next: [Layer 4 — Data](06-layer4-data.md)*
+*Back to [ILA Overview](ILA-Overview.md) | Previous: [Layer 2 - Control](ILA-Layer2-Control.md) | Next: [Layer 4 - Data](ILA-Layer4-Data.md)*
