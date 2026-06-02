@@ -1,90 +1,213 @@
-# Contributing to ILA
+# ILA Layer 1 - Field
 
-Thank you for your interest in contributing to Industrial Layered Architecture.
-
-ILA is built by practitioners, for practitioners. Every contribution helps: a question from a technician, a correction from a PLC engineer, an example from a system integrator, or a full RFC from an OT architect.
+**Sensors, actuators, drives, robots, cameras, safety devices, wiring, and the signals that connect the automation system to the physical process.**
 
 ---
 
-## How to Contribute
+## Purpose
 
-### Ask a Question or Start a Discussion
-Open a thread in [GitHub Discussions](https://github.com/thefactorystack/ILA/discussions). This is the best place for questions, ideas, and feedback that don't require a code or documentation change.
+The Field Layer is where the automation system touches the real world. Every measurement, detection, movement, reject, fill, heat, stop, and safety input starts here.
 
-### Report an Error or Suggest an Improvement
-Open an [Issue](https://github.com/thefactorystack/ILA/issues) with a clear description of what's wrong or what could be better. Include the file name and section if relevant.
+If Layer 1 is poorly named, wired, or documented, every layer above it inherits the confusion. A bad field tag becomes a bad PLC variable, a confusing HMI object, an inconsistent historian tag, and a troubleshooting problem at 3 AM.
 
-Good issues usually include:
+## What Belongs Here
 
-- What you expected the document to say
-- What it currently says
-- Why the difference matters in a real plant
-- Any relevant standard, implementation example, or field experience
+- Sensors (proximity, photoelectric, temperature, pressure, flow, level, vision)
+- Actuators (solenoid valves, pneumatic cylinders, motors, drives)
+- Industrial robots and cobots
+- Vision systems and smart cameras
+- Barcode and RFID readers
+- IO-Link masters and devices
+- Field wiring, junction boxes, terminal strips
+- Safety field devices (e-stops, light curtains, safety gates, safe torque-off inputs)
+- Device-level diagnostics (IO-Link quality, operating hours, cycle counts, signal margin)
 
-### Contribute a Change
-1. Fork the repository
-2. Create a branch: `git checkout -b your-topic`
-3. Make your changes
-4. Submit a pull request with a clear description of what you changed and why
+## What Does Not Belong Here
 
-All pull requests require review from at least one Core Contributor before merging.
+- PLC logic (that is Layer 2)
+- Network switches or firewalls (that is Layer 5)
+- Process-flow decisions that determine what the machine does next
+- Historian, reporting, or dashboard logic
+
+## Field Layer Rules
+
+These rules keep the physical layer traceable, maintainable, and safe to build on.
+
+| Rule | Principle | Meaning |
+|------|-----------|---------|
+| R1 | **Naming starts here, not in PLC or SCADA** | If a sensor has two names, the system is already drifting. Assign the field identity first and carry it upward through every layer. |
+| R2 | **Fail-safe beats fancy features** | When something fails, it must fail safely, not cleverly. A smart device feature is not useful if its failure mode is unclear. |
+| R3 | **Standardize signal types consistently** | A site standard must mean what it says. If `4-20 mA` is the standard, do not quietly use `0-10 V` because it was easier during installation. |
+| R4 | **Sensors must be properly installed and calibrated** | Bad measurements create bad decisions in every layer above. Installation quality and calibration are architectural concerns, not maintenance trivia. |
+| R5 | **Documentation must follow the installation** | If a device is installed but not documented, it does not exist operationally. Drawings, tag lists, parameters, and maintenance notes must match the real installation. |
+
+## Key Standards
+
+### ISA 5.1 - Tag Naming
+
+ISA 5.1 (Instrumentation Symbols and Identification) provides the naming conventions that make field devices identifiable across the entire stack.
+
+**Why it matters:** A tag name assigned at Layer 1 is carried through PLC programs, HMI screens, alarm lists, historians, network inventories, and maintenance documentation. Get it wrong here and the whole stack pays for it.
+
+**ILA tag naming pattern:**
+
+```
+{Area}_{Unit}_{DeviceType}{Sequence}_{Attribute}
+```
+
+| Segment | Description | Example |
+|---------|-------------|---------|
+| Area | Functional area, line, or cell | `IC01` (Inspection Cell 01) |
+| Unit | Specific equipment or station | `ST01` (Station 01) |
+| DeviceType + Seq | Device type and sequence | `PS01` (Pressure Switch 01) |
+| Attribute | Signal type or function | `TriggerReq`, `Value`, `Alarm` |
+
+**Examples:**
+
+| Tag | Meaning |
+|-----|---------|
+| `IC01_CAM01_TriggerReq` | Inspection Cell 01, Camera 01, Trigger Request |
+| `BR01_FV01_CmdOpen` | Brewery Area 01, Fill Valve 01, Command Open |
+| `BR01_TT01_Value` | Brewery Area 01, Temperature Transmitter 01, Process Value |
+| `PK01_CYL03_FbkExtended` | Packaging Area 01, Cylinder 03, Extended Feedback |
+
+**Rules for tag names:**
+
+- No spaces, no special characters beyond underscores
+- English language for shared technical coordinates, even when operator-facing text is localized
+- Consistent left-to-right hierarchy: Area, Unit, Device, Attribute
+- The tag name alone must tell you: where the device is, what it is, and what the signal represents
+- Do not rename a tag because the hardware was replaced; the tag identifies the function and location
+
+### IO-Link (IEC 61131-9)
+
+IO-Link provides point-to-point, parameterized communication between smart field devices and the control layer.
+
+**Where IO-Link fits in ILA:**
+
+- IO-Link devices are Layer 1 assets
+- IO-Link masters sit at the boundary between Layer 1 and Layer 2
+- IO-Link device parameters should be stored and version-controlled (this supports ILA Rule 1 — the device identity is part of the architecture)
+
+**Practical benefits:**
+
+- Automatic device replacement (a new sensor loads its predecessor's parameters)
+- Diagnostic data (signal quality, temperature, operating hours) flows up to Layer 4
+- Reduced wiring complexity compared to traditional analog/digital IO
+
+### Industrial Ethernet Protocols
+
+Field devices increasingly communicate over Ethernet-based protocols rather than traditional 4–20 mA or 24V digital signals.
+
+| Protocol | Typical Use | Notes |
+|----------|-------------|-------|
+| PROFINET | Siemens-dominated environments | Real-time, IRT for motion |
+| EtherNet/IP | Rockwell / Allen-Bradley environments | CIP-based, uses standard Ethernet |
+| EtherCAT | High-speed motion, packaging | Distributed clocks, very fast cycle times |
+| Modbus TCP | Legacy and simple devices | No built-in security — isolate on network |
+
+**ILA principle:** The choice of field protocol is a Layer 1 and Layer 5 design decision. Layer 2 should expose a clean device model to the rest of the PLC program so that business logic is not scattered across protocol-specific details.
+
+## Safety Devices
+
+Safety field devices are Layer 1 assets, but safety logic belongs in Layer 2 on safety-rated hardware. Do not hide safety behavior in a standard PLC routine, HMI script, or drive parameter without a documented safety design.
+
+**ILA principle:** Safety logic is Control Layer logic (Layer 2) executed on safety-rated hardware. Safety field devices are Layer 1 devices with dedicated, traceable tag names following ISA 5.1 conventions.
+
+**Example safety tags:**
+
+| Tag | Meaning |
+|-----|---------|
+| `IC01_ES01_Status` | Inspection Cell 01, E-Stop 01, Status |
+| `IC01_LC01_Muted` | Inspection Cell 01, Light Curtain 01, Muted |
+| `PK01_SG01_DoorClosed` | Packaging 01, Safety Gate 01, Door Closed |
+
+## Robots and Vision Systems
+
+Industrial robots and vision systems are Layer 1 assets because they physically interact with the process. They often contain embedded controllers and internal programs, but that does not make them owners of the process flow.
+
+**ILA principle:** The robot's internal program handles motion paths and sequences. The PLC (Layer 2) owns the process flow and tells the robot *when* to act via a handshake protocol. The robot does not decide process flow — it executes motion on command.
+
+**Basic handshake pattern (OPC UA, fieldbus, or discrete I/O):**
+
+```
+PLC -> Robot:  StartCmd = TRUE
+Robot -> PLC:  Busy = TRUE
+Robot -> PLC:  Done = TRUE
+PLC -> Robot:  StartCmd = FALSE (acknowledge)
+Robot -> PLC:  Busy = FALSE, Done = FALSE (reset)
+```
+
+This basic pattern applies equally to vision systems, label printers, or any smart field device with its own controller. Real-world implementations extend it:
+
+**Multi-program selection:** When a robot executes different programs depending on product variant or recipe, the PLC sends a program ID before issuing StartCmd. The robot confirms the loaded program before the PLC asserts Start.
+
+```
+PLC -> Robot:  ProgramID = 3
+Robot -> PLC:  ProgramLoaded = 3 (confirm)
+PLC -> Robot:  StartCmd = TRUE
+```
+
+**Fault handling:** When a robot enters a fault state while the PLC is waiting for Done, the handshake must not deadlock. The robot signals Fault, and the PLC responds by transitioning to its own fault or abort state — it does not wait indefinitely.
+
+```
+PLC -> Robot:  StartCmd = TRUE
+Robot -> PLC:  Busy = TRUE
+Robot -> PLC:  Fault = TRUE, Busy = FALSE
+PLC:           Detect fault, transition to Aborting
+PLC -> Robot:  StartCmd = FALSE
+```
+
+**ILA principle:** Always implement a PLC-side timeout on robot and vision handshakes. If `Done` and `Fault` are both false beyond the expected cycle time, the PLC raises an alarm and transitions to a defined state. Never assume a smart device will complete its cycle.
+
+**Safe home position:** Define a "home" position for every robot. The PLC must be able to verify that the robot is at home (via a HomePos feedback signal) before starting a new cycle or after a fault recovery. The robot's internal program must include a "return to home" routine that can be triggered independently of the production cycle.
+
+## Maintenance and Troubleshooting at Layer 1
+
+Field devices are where maintenance technicians spend their time — often at 3 AM with minimal documentation at hand.
+
+**How ILA tag naming supports troubleshooting:** A tag like `PK01_CYL03_FbkExtended` tells the technician where to go, what device to find, and what signal to check. If the tag does not lead a competent technician toward the device, the tag is wrong.
+
+**Diagnostic data:** Modern field devices (especially IO-Link devices) provide diagnostic information beyond their primary signal — operating hours, signal quality, internal temperature, supply voltage. ILA recommends exposing diagnostic tags alongside process tags so that Layer 4 (Data) can trend device health over time. This enables predictive maintenance rather than reactive replacement.
+
+**Device replacement workflow:** When a field device is replaced, the replacement inherits the same tag name, function, wiring reference, and parameters. If the function and location did not change, the tag should not change.
+
+## Minimum Documentation
+
+For every critical Layer 1 asset, keep these references aligned:
+
+| Item | Why it matters |
+|------|----------------|
+| ILA tag name | Shared identity across all layers |
+| Electrical drawing reference | Where the wire terminates |
+| Network address or node ID | How the device communicates |
+| Parameter backup | How the device is replaced |
+| Safety classification, if relevant | How the device affects risk reduction |
+| Maintenance note | What a technician should check first |
+
+**Example diagnostic tags:**
+
+| Tag | Purpose |
+|-----|---------|
+| `PK01_CYL03_FbkExtended` | Process signal — cylinder position |
+| `PK01_CYL03_CycleCount` | Diagnostic — total actuations |
+| `PK01_CYL03_SwitchQuality` | Diagnostic — sensor signal quality (IO-Link) |
+
+## Practical Checklist
+
+- [ ] Every field device has an ISA 5.1-compliant tag name
+- [ ] Tag names follow the `{Area}_{Unit}_{DeviceType}{Seq}_{Attribute}` pattern
+- [ ] IO-Link device parameters are backed up and version-controlled
+- [ ] Safety devices are tagged and documented separately
+- [ ] Robot/vision handshakes include fault handling and PLC-side timeouts
+- [ ] Robot programs support multi-program selection via PLC program ID
+- [ ] Safe home position is defined and verifiable by PLC for every robot
+- [ ] Diagnostic tags (cycle count, signal quality) are exposed for critical devices
+- [ ] Device replacement workflow preserves tag name and IO-Link parameters
+- [ ] Field device documentation (datasheets, wiring diagrams) references the ILA tag name
+- [ ] No field device makes autonomous process decisions — all process logic is in Layer 2
+- [ ] Exceptions are documented where a smart device contains unavoidable local behavior
 
 ---
 
-## What We Are Looking For
-
-- Corrections to documentation (factual errors, unclear language, broken links)
-- Real-world examples of ILA applied in practice
-- Industry-specific adaptations (food & beverage, pharma, automotive, etc.)
-- Diagrams, checklists, templates, and implementation patterns
-- Clarifications that make ILA easier to adopt in brownfield factories
-- Translations (future)
-
-## Contribution Quality Bar
-
-ILA is intentionally practical. Contributions should:
-
-- Be grounded in real industrial experience or a clearly cited standard
-- Preserve the five-layer model unless proposing an RFC
-- Make the framework easier to understand or apply
-- Avoid vendor marketing language
-- Distinguish between a rule, a recommendation, an example, and an exception
-- Include enough context that a reviewer can understand the operational impact
-
----
-
-## What Requires an RFC
-
-Changes to the ILA Core Specification require an RFC. See [Governance](GOVERNANCE.md) for the full RFC process.
-
-Examples that require an RFC:
-
-- Changing the definition of a layer
-- Adding, removing, or changing one of the five rules
-- Changing the default naming pattern
-- Introducing a new required standard
-- Changing governance or contributor roles
-
-Examples that usually do not require an RFC:
-
-- Fixing unclear wording
-- Adding a practical example
-- Adding a checklist item that supports an existing rule
-- Correcting a broken link or typo
-- Adding an industry-specific note that does not change the core model
-
-For everything else, a pull request is sufficient.
-
----
-
-## Language
-
-English is the working language for documentation, examples, tags, and code comments. Operator-facing HMI text may be localized in real implementations, but the framework documentation uses English so it can be shared across plants, vendors, and countries.
-
----
-
-## Code of Conduct
-
-Be professional. Assume good faith. Keep discussions focused on the work.
-
-Full details are in [Governance](GOVERNANCE.md).
+*Back to [ILA Overview](ILA-Overview.md) | Next: [Layer 2 - Control](ILA-Layer2-Control.md)*
