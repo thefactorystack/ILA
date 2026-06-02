@@ -1,16 +1,18 @@
-# ILA Layer 4 — Data
+# ILA Layer 4 - Data
 
-**Historians, databases, MQTT brokers, OPC UA aggregation — moving and storing process data.**
+**Historians, databases, MQTT brokers, OPC UA aggregators, edge data services, APIs, and the read-only operational data layer.**
 
 ---
 
 ## Purpose
 
-The Data Layer is responsible for collecting, storing, and making process data available — without altering it and without sending commands downward. It exists to answer the question: "What happened, when, and why?"
+The Data Layer collects, stores, structures, enriches, and publishes operational data. It exists to answer: **what happened, when, where, under which recipe, and why?**
+
+Layer 4 is powerful because it makes factory data useful outside the PLC and HMI. It is dangerous when it becomes an unofficial control layer. ILA keeps that boundary explicit.
 
 This layer is governed most directly by **ILA Rule 4: Data flows up, commands flow down.**
 
-## What Belongs in Layer 4
+## What Belongs Here
 
 - Process historians (time-series databases)
 - Relational databases (SQL) for batch records, recipe storage, quality data
@@ -19,13 +21,28 @@ This layer is governed most directly by **ILA Rule 4: Data flows up, commands fl
 - Data pipeline services (Sparkplug B encoders, protocol translators)
 - Edge computing and data preprocessing (aggregation, downsampling)
 - API endpoints that expose OT data to authorized consumers
+- Data contracts for MES, ERP, QMS, CMMS, and cloud consumers
+- Data quality, retention, and lineage rules
 
-## What Does NOT Belong in Layer 4
+## What Does Not Belong Here
 
 - Process logic or control decisions (that is Layer 2)
 - Operator interfaces or visualization (that is Layer 3)
 - Network infrastructure or firewalls (that is Layer 5)
 - Direct writes to PLC tags or field devices
+- Undocumented data transformations that change the meaning of a process value
+
+## Data Layer Rules
+
+These rules keep operational data trustworthy, contextual, and safe to consume.
+
+| Rule | Principle | Meaning |
+|------|-----------|---------|
+| R1 | **Define retention before go-live** | Retention policy is not an afterthought. If the first retention decision happens when the disk is full, the data architecture has already failed. |
+| R2 | **Historian data is evidence, not backup** | Historian data must be trusted, timestamped, and traceable. It is evidence of what happened in production; it is not a replacement for PLC, SCADA, VM, database, or configuration backups. |
+| R3 | **Data collection must never impact production** | The data layer is a passive observer. If data collection affects machine performance, scan time, network stability, or operator response, it was designed incorrectly. |
+| R4 | **Data without context is worthless** | Timestamp, unit, source tag, asset relation, and quality/status are the minimum. A number without context cannot be trusted. |
+| R5 | **Version everything** | Recipes, schemas, tag structures, calculations, dashboards, and data contracts must be versioned. Without version history, you cannot trust what you are looking at. |
 
 ## Key Standards
 
@@ -40,9 +57,9 @@ OPC UA (Open Platform Communications Unified Architecture) is the primary standa
 | Layer 2 → Layer 3 | Up | PLC exposes tags to SCADA via OPC UA server |
 | Layer 2 → Layer 4 | Up | Historian subscribes to PLC tags via OPC UA |
 | Layer 3 → Layer 2 | Down | SCADA writes operator commands via OPC UA |
-| Layer 4 → Layer 2 | Read only | Data layer reads — never writes commands to PLC |
+| Layer 4 -> Layer 2 | Read only | Data layer reads; it does not command the PLC |
 
-**ILA principle:** The PLC (Layer 2) is the OPC UA server. Layers 3 and 4 are OPC UA clients. Commands flow down through Layer 3 (operator-initiated) — Layer 4 never issues commands to the control system.
+**ILA principle:** The PLC or approved control gateway exposes the authoritative process model. Layer 4 reads that model. It may aggregate, buffer, publish, or store data, but it does not issue commands to the control system.
 
 **OPC UA node design (aligns with Rule 5):**
 
@@ -53,8 +70,8 @@ Root
 ├── {Area}
 │   ├── PackML
 │   │   ├── StateCurrent     (read)
-│   │   ├── CmdStart         (write — Layer 3 only)
-│   │   └── CmdStop          (write — Layer 3 only)
+│   │   ├── CmdStart         (write - Layer 3 only)
+│   │   └── CmdStop          (write - Layer 3 only)
 │   ├── {Unit}
 │   │   ├── {Device}_Value   (read)
 │   │   ├── {Device}_Status  (read)
@@ -90,7 +107,7 @@ Example:
 spBv1.0/PlantFloor/DDATA/InspectionCell01/Camera01
 ```
 
-**ILA principle:** Sparkplug B topic structure should align with ILA tag naming. The `EdgeNodeID` maps to the ILA Area, and the `DeviceID` maps to the ILA Unit. This ensures that data arriving at Layer 4 is self-describing and traceable back to its physical source.
+**ILA principle:** Sparkplug B topic structure should align with ILA naming. The topic and payload should make the site, area, unit, and device identity traceable without relying on a separate spreadsheet.
 
 **When to use MQTT vs. OPC UA:**
 
@@ -98,9 +115,31 @@ spBv1.0/PlantFloor/DDATA/InspectionCell01/Camera01
 |----------|-------------|-----------|
 | PLC to SCADA (Layer 2 → 3) | OPC UA | Structured, bidirectional, security built in |
 | PLC to Historian (Layer 2 → 4) | OPC UA | Historian vendors have native OPC UA drivers |
-| Edge to cloud or multi-site (Layer 4 → external) | MQTT/Sparkplug B | Lightweight, firewall-friendly, pub/sub model |
+| Edge to cloud or multi-site (Layer 4 -> external) | MQTT/Sparkplug B | Lightweight, firewall-friendly, pub/sub model |
 | High-volume sensor streaming | MQTT | Lower overhead per message |
 | Mixed vendor, many consumers | MQTT + Sparkplug B | Decoupled architecture, standardized payloads |
+
+### UNS - Unified Namespace
+
+A Unified Namespace (UNS) is an architectural pattern for organizing industrial data into a shared, discoverable namespace. It is not a formal ISA or IEC standard, but it is a useful way to make Layer 4 data understandable across SCADA, historians, MES, analytics, and cloud systems.
+
+**Where UNS fits in ILA:**
+
+- UNS belongs in Layer 4 as a data organization and publication pattern.
+- UNS should preserve ILA naming and asset hierarchy instead of inventing a parallel model.
+- UNS consumers should read and subscribe to data; they should not gain command authority over Layer 2.
+- UNS topics or paths should carry enough context to identify site, area, unit, asset, signal, timestamp, unit, and quality/status.
+
+**ILA principle:** A UNS is valuable only if it improves traceability. If the namespace hides the source tag, strips units, loses asset context, or becomes a backdoor command bus, it violates ILA.
+
+**Example UNS path:**
+
+```text
+{Site}/{Area}/{Unit}/{Asset}/{Signal}
+
+S01/IC01/Inspection/Camera01/InspResult
+S01/IC01/Production/PackML/StateCurrent
+```
 
 ### Time-Series Databases and Historians
 
@@ -116,7 +155,7 @@ Process historians are the primary data store in Layer 4. They optimize for high
 | OSIsoft PI (AVEVA) | Industry standard in process industries |
 | FactoryTalk Historian | Rockwell ecosystem |
 
-**ILA principle:** The historian's tag structure must mirror the PLC tag structure (Rule 5). If the PLC has `BR01_TT01_Value`, the historian stores it under the same name — not renamed, not restructured. One name, one signal, from field device to historian.
+**ILA principle:** The historian's tag structure should preserve the PLC tag identity. Friendly aliases are acceptable for reports and dashboards, but the source tag must remain traceable. One signal should not become five unrelated names.
 
 ### Relational Databases (SQL)
 
@@ -166,29 +205,29 @@ CREATE TABLE BatchParameter (
 
 ## Data Flow Discipline (Rule 4)
 
-Rule 4 — Data flows up, commands flow down — is the most critical principle at Layer 4.
+Rule 4 - Data flows up, commands flow down - is the most critical principle at Layer 4.
 
-**What "up" means:** Data moves from the physical process (Layer 1) through the PLC (Layer 2), optionally through SCADA (Layer 3), and into the Data Layer (Layer 4). At each step, the data is read — never modified in transit.
+**What "up" means:** Data moves from the physical process through the control system and into storage, analytics, reporting, or integration systems. At each step, the source and meaning of the data remain traceable.
 
-**What "down" means:** Commands originate from an operator or system at Layer 3, pass through OPC UA to Layer 2, and are executed at Layer 1. Layer 4 never initiates commands.
+**What "down" means:** Commands originate from an operator or approved supervisory workflow, pass through Layer 3, and are validated by Layer 2. Layer 4 does not initiate commands.
 
 **Violations of Rule 4 (and why they are dangerous):**
 
 | Violation | Risk |
 |-----------|------|
-| Historian writes a setpoint to the PLC | Unsupervised control action — no operator in the loop |
+| Historian writes a setpoint to the PLC | Unsupervised control action with no operator in the loop |
 | Dashboard sends a start command to a machine | Bypasses HMI safety interlocks and operator awareness |
-| Cloud system modifies a recipe in the PLC directly | Unaudited change, no local validation |
+| Cloud system modifies a recipe in the PLC directly | Unaudited change with no local validation |
 | Layer 4 service calculates and writes a derived tag back to PLC | Control logic now depends on an external system's availability |
 
 ## Edge Computing
 
-Edge computing in ILA sits within Layer 4 — it processes and transforms data close to the source before forwarding it to historians, cloud, or analytics platforms.
+Edge computing in ILA sits in Layer 4 when it processes data. It may run physically close to the machine, but physical location does not change architectural responsibility.
 
 **Acceptable edge computing tasks:**
 
-- Data downsampling (e.g., 100ms scan → 1s average for historian)
-- Protocol translation (OPC UA → MQTT/Sparkplug B)
+- Data downsampling (for example, 100 ms scan to 1 s average for historian)
+- Protocol translation (OPC UA to MQTT/Sparkplug B)
 - Local buffering (store-and-forward when connectivity is lost)
 - Data enrichment (adding metadata: area, unit, shift context)
 
@@ -202,7 +241,7 @@ Edge computing in ILA sits within Layer 4 — it processes and transforms data c
 
 Many organizations want (or are required by corporate IT) to send OT data to cloud platforms — Azure IoT Hub, AWS IoT SiteWise, Google Cloud IoT, or cloud-hosted historians. ILA takes a clear position on this:
 
-**ILA principle: The local OT historian is always the source of truth.** Cloud receives a replicated, filtered subset of data via the DMZ. If the cloud connection goes down, the plant continues to operate and record data locally. If the local historian goes down, the cloud copy is not authoritative for process decisions.
+**ILA principle: the local OT historian is the operational source of truth.** Cloud platforms may receive replicated or filtered data via the DMZ, but the plant must continue to operate and record locally when the cloud connection is unavailable. Cloud data is useful for fleet analytics; it is not authoritative for local control decisions.
 
 **Architecture pattern:**
 
@@ -210,7 +249,7 @@ Many organizations want (or are required by corporate IT) to send OT data to clo
 Layer 2 (PLC)
     │ OPC UA
     ▼
-Layer 4 (Local Historian) ← Source of truth
+Layer 4 (Local Historian) <- operational source of truth
     │ Filtered replication via MQTT or API
     ▼
 Layer 5 (DMZ)
@@ -219,7 +258,7 @@ Layer 5 (DMZ)
 Cloud Historian / Data Lake
 ```
 
-**What to replicate to cloud:** Aggregated KPIs (OEE, throughput, quality rates), batch summary records, equipment health metrics, energy consumption. What *not* to replicate: raw high-frequency control signals, safety system states, detailed PLC diagnostics — these stay on-premises.
+**What to replicate to cloud:** Aggregated KPIs, batch summaries, quality summaries, equipment health metrics, and energy consumption. Be cautious with raw high-frequency control signals, safety data, credentials, and detailed PLC diagnostics. Replication scope should be intentional, documented, and approved.
 
 **Multi-site considerations:** For organizations with multiple plants, cloud becomes the aggregation point for cross-site comparison. Each site maintains its own local historian (source of truth for that site), and a standardized data pipeline pushes agreed-upon KPIs to the cloud. ILA tag naming consistency across sites (using a site prefix: `S01_IC01_CAM01_TriggerReq`) is what makes cross-site comparison possible. Without consistent naming, cloud aggregation is an ETL nightmare.
 
@@ -227,13 +266,28 @@ Cloud Historian / Data Lake
 
 ISA-95 (IEC 62264) defines standardized activity models for data exchange between manufacturing operations and business systems. At Layer 4, the relevant models are:
 
-**Production Operations:** Scheduling, dispatching, execution tracking, data collection, performance analysis. When a work order flows down from ERP → MES → Layer 3, and production data flows back up through Layer 4, ISA-95 provides the data model (B2MML — Business to Manufacturing Markup Language) to structure this exchange.
+**Production Operations:** Scheduling, dispatching, execution tracking, data collection, and performance analysis. When a work order flows down from ERP to MES to Layer 3, and production data flows back up through Layer 4, ISA-95 provides the data model to structure the exchange.
 
 **Quality Operations:** Test execution, quality data collection, SPC (Statistical Process Control). Quality data generated at Layer 2 (inspection results, measurements) flows up to Layer 4 for storage and analysis, and may be forwarded to quality management systems using ISA-95 structures.
 
 **Maintenance Operations:** Equipment monitoring, maintenance scheduling, failure tracking. Diagnostic data from Layer 1 (IO-Link device health) and Layer 2 (PLC fault logs) flows to Layer 4 where it supports maintenance planning.
 
-**ILA principle:** Use ISA-95 activity models to define the data contracts between OT (Layers 1-4) and business systems (ERP, QMS, CMMS). This makes the integration structured and vendor-independent. Do not build ad-hoc CSV exports or custom API integrations without referencing ISA-95 — you will rebuild them every time a system is upgraded.
+**ILA principle:** Use ISA-95 activity models to define data contracts between OT and business systems. Ad-hoc exports may be acceptable as temporary interfaces, but they should not become undocumented production architecture.
+
+## Data-Layer Decisions
+
+Make these decisions explicit:
+
+| Decision | ILA default |
+|----------|-------------|
+| PLC access | Layer 4 is read-only |
+| Historian naming | Preserve source tag identity |
+| Cloud role | Replica and analytics consumer, not control authority |
+| Edge role | Buffer, transform, enrich, publish - not control |
+| Data contracts | Use ISA-95 concepts where integrating with business systems |
+| Unified Namespace | Organize published data using ILA hierarchy and preserve source traceability |
+| Data retention | Define by use case, compliance, and storage cost |
+| Data quality | Track source, timestamp, unit, and transformation history |
 
 ## Practical Checklist
 
@@ -241,6 +295,7 @@ ISA-95 (IEC 62264) defines standardized activity models for data exchange betwee
 - [ ] Historian tag names match PLC tag names exactly (Rule 5)
 - [ ] OPC UA connections use certificate-based authentication
 - [ ] MQTT/Sparkplug B topics align with ILA tag naming
+- [ ] UNS paths preserve ILA hierarchy, source tag identity, units, and quality/status
 - [ ] Batch records follow ISA-88 structure
 - [ ] Edge computing is limited to data processing — no control logic
 - [ ] Data retention policies are defined and documented
@@ -251,7 +306,9 @@ ISA-95 (IEC 62264) defines standardized activity models for data exchange betwee
 - [ ] Multi-site tag naming uses site prefix for cross-site consistency
 - [ ] ISA-95 activity models structure the data exchange with business systems
 - [ ] MES/ERP integrations use standardized data contracts, not ad-hoc exports
+- [ ] Data transformations preserve lineage and units
+- [ ] Exceptions to read-only Layer 4 access are reviewed and documented
 
 ---
 
-*Back to [ILA Overview](01-overview.md) | Previous: [Layer 3 — Supervisory](05-layer3-supervisory.md) | Next: [Layer 5 — OT Platform](07-layer5-otplatform.md)*
+*Back to [ILA Overview](ILA-Overview.md) | Previous: [Layer 3 - Supervisory](ILA-Layer3-Supervisory.md) | Next: [Layer 5 - OT Platform](ILA-Layer5-OTPlatform.md)*
