@@ -1,16 +1,16 @@
-# ILA Layer 2 — Control
+# ILA Layer 2 - Control
 
-**PLCs, safety controllers, motion controllers — the layer that owns the process logic and dictates the structure of everything above it.**
+**PLCs, safety controllers, motion controllers, state machines, interlocks, recipes, and the executable structure of the machine.**
 
 ---
 
 ## Purpose
 
-The Control Layer is the heart of ILA. It is where process logic lives, where machine states are managed, and where the structure of the entire automation system is defined. Every other layer aligns to the decisions made here.
+The Control Layer is where machine behavior is decided. It owns process logic, state transitions, interlocks, sequencing, timing, recipe validation, and the executable structure that the rest of the stack should follow.
 
 This is the layer governed most directly by **ILA Rule 5: Structure is dictated by the Control Layer.**
 
-## What Belongs in Layer 2
+## What Belongs Here
 
 - PLC programs (main process logic)
 - Safety PLC programs (safety logic on safety-rated hardware)
@@ -19,21 +19,35 @@ This is the layer governed most directly by **ILA Rule 5: Structure is dictated 
 - ISA-88 batch control logic
 - Recipe validation logic
 - OPC UA server configuration (exposing tags to higher layers)
-- All process interlocks, sequencing, and timing
+- Equipment modules and reusable function blocks
+- All process interlocks, sequencing, permissives, and timing
 
-## What Does NOT Belong in Layer 2
+## What Does Not Belong Here
 
 - HMI/SCADA scripting (that is Layer 3)
 - Database queries or historian writes (that is Layer 4)
 - Network configuration (that is Layer 5)
+- Business rules that belong in MES or ERP, unless they must be enforced for safe machine operation
+
+## Control Layer Rules
+
+These rules keep the PLC and related controllers readable, deterministic, and safe to operate for the life of the machine.
+
+| Rule | Principle | Meaning |
+|------|-----------|---------|
+| R1 | **Safety is always the first priority** | Fault handling is not a feature; it is architecture. Safety logic belongs on safety-rated hardware and must not be mixed casually with standard process logic. |
+| R2 | **Use standards** | Clear sequence, clear state, clear transition. Use PackML, ISA-88, IEC 61131-3, and site standards where they fit. Unnamed custom patterns become chaos over time. |
+| R3 | **PLC code must be readable in 10 years** | Use named constants, clear variables, reusable function blocks, and explicit state transitions. No cryptic names, hidden quick fixes, or commissioning hacks left behind as permanent architecture. |
+| R4 | **Recipes and parameters come from above; validation happens here** | Layer 3 or MES may provide recipe intent and parameters. The PLC validates them and executes safely. The PLC should not become the master recipe authoring system. |
+| R5 | **If SCADA goes down, the machine still runs safely** | Design from day one so the machine can continue, stop, hold, or recover safely without relying on SCADA scripts or HMI availability. |
 
 ## Key Standards
 
-### IEC 61131-3 — PLC Programming
+### IEC 61131-3 - PLC Programming
 
 IEC 61131-3 defines the five PLC programming languages: Structured Text (ST), Ladder Diagram (LD), Function Block Diagram (FBD), Sequential Function Chart (SFC), and Instruction List (IL, deprecated).
 
-**ILA recommendation:** Use Structured Text (ST) as the primary language for new projects. It is version-control friendly, readable, and maps well to modern software practices. Use Ladder Diagram where mandated by local standards or maintenance team capabilities.
+**ILA recommendation:** Use Structured Text (ST) as the primary language for new projects when the team can maintain it. It is version-control friendly and works well for state machines, data structures, and reusable libraries. Use Ladder Diagram where local standards, technician capability, or safety review practices require it. Maintainability by the plant team matters more than language fashion.
 
 **Program organization:**
 
@@ -44,13 +58,13 @@ Project
 │   │   ├── MainTask (cyclic, e.g. 10 ms)
 │   │   └── SlowTask (cyclic, e.g. 100 ms)
 │   ├── POU (Program Organization Units)
-│   │   ├── PRG_Main           — Main program entry point
-│   │   ├── PRG_PackML         — PackML state machine
-│   │   ├── PRG_Station01      — Station 01 sequence
-│   │   ├── PRG_Station02      — Station 02 sequence
-│   │   ├── FB_Cylinder        — Reusable cylinder function block
-│   │   ├── FB_Motor           — Reusable motor function block
-│   │   └── FC_RecipeValidate  — Recipe validation function
+│   │   ├── PRG_Main           - Main program entry point
+│   │   ├── PRG_PackML         - Machine state model
+│   │   ├── PRG_Station01      - Station 01 sequence
+│   │   ├── PRG_Station02      - Station 02 sequence
+│   │   ├── FB_Cylinder        - Reusable cylinder function block
+│   │   ├── FB_Motor           - Reusable motor function block
+│   │   └── FC_RecipeValidate  - Recipe validation function
 │   └── GVL (Global Variable Lists)
 │       ├── GVL_IO             — Physical IO mapping
 │       ├── GVL_PackML         — PackML state and command variables
@@ -60,11 +74,11 @@ Project
 
 **ILA principle:** The POU structure mirrors the physical machine. If the machine has three stations, the PLC has three station programs. The SCADA screen hierarchy, historian tag groups, and alarm groups all derive from this structure (Rule 5).
 
-### PackML / ISA-TR88.00.02 — Machine State Model
+### PackML / ISA-TR88.00.02 - Machine State Model
 
 PackML defines a standardized state model with 17 states that describe the lifecycle of a machine from idle to producing to faulted.
 
-**Why PackML matters for ILA:** It provides a universal language for machine states. Whether you build packaging lines, inspection cells, or process plants, the state names and transitions are the same. This means Layer 3 (SCADA) can use consistent HMI faceplates, and Layer 4 (Data) can compare OEE across machines.
+**Why PackML matters for ILA:** It provides a shared language for machine states. Whether you build packaging lines, inspection cells, assembly stations, or process units, the lifecycle is familiar: idle, start, execute, stop, fault, clear, reset. This lets Layer 3 use consistent state displays and lets Layer 4 compare state history across machines.
 
 **The 17 PackML states:**
 
@@ -92,7 +106,7 @@ PackML defines a standardized state model with 17 states that describe the lifec
 
 Not every machine needs all 17 states. ILA divides them into core states (implement always) and optional states (implement when your process requires them):
 
-*Core states (always implement):*  Idle, Starting, Execute, Stopping, Stopped, Aborting, Aborted, Clearing, Resetting. These nine states cover the full lifecycle of any machine — startup, production, controlled shutdown, and fault handling.
+*Core states (default starting set):* Idle, Starting, Execute, Stopping, Stopped, Aborting, Aborted, Clearing, Resetting. These nine states cover startup, production, controlled shutdown, and fault handling.
 
 *Optional states — Hold/Unhold:*  Add these when the machine has *internal* pause conditions — for example, a feeder that runs empty while the machine can resume automatically once refilled. Hold means "I paused myself."
 
@@ -100,7 +114,7 @@ Not every machine needs all 17 states. ILA divides them into core states (implem
 
 *Optional states — Completing/Complete:*  Add these when the machine processes finite batches or work orders and needs to distinguish between "still running" and "finished the current job, awaiting new work."
 
-**Rule of thumb:** Start with the 9 core states. Run the machine in simulation. If you find yourself inventing ad-hoc workarounds for pause/resume behavior, that is your signal to add Hold or Suspend. Do not add states preemptively — each state adds testing surface and HMI complexity.
+**Rule of thumb:** Start with the 9 core states. Run the machine in simulation. If you find yourself inventing ad-hoc pause/resume behavior, add the relevant PackML states. Do not add states preemptively; every state adds test cases, HMI behavior, alarm behavior, and operator training.
 
 **Implementation pattern:**
 
@@ -132,20 +146,20 @@ END_CASE
 
 **ILA Rule 5 enforcement:** Recipe validation happens in the `Starting` state. The Control Layer validates that the Supervisory Layer has provided a valid, complete recipe before the machine enters `Execute`. The SCADA never decides if a recipe is valid — it sends the recipe, and the PLC confirms or rejects it.
 
-### ISA-88 / IEC 61512 — Batch Control
+### ISA-88 / IEC 61512 - Batch Control
 
 ISA-88 provides the framework for batch manufacturing with three core models:
 
-**Physical Model** — describes the physical equipment hierarchy:
+**Physical Model** - describes the physical equipment hierarchy:
 
 ```
-Enterprise → Site → Area → Process Cell → Unit → Equipment Module → Control Module
+Enterprise -> Site -> Area -> Process Cell -> Unit -> Equipment Module -> Control Module
 ```
 
-**Procedural Model** — describes the recipe execution hierarchy:
+**Procedural Model** - describes the recipe execution hierarchy:
 
 ```
-Procedure → Unit Procedure → Operation → Phase
+Procedure -> Unit Procedure -> Operation -> Phase
 ```
 
 **Process Model** — describes the process itself (stages and transitions).
@@ -176,25 +190,25 @@ Procedural:   MashProcedure
               └── TransferUnitProc
 ```
 
-### PackML and ISA-88 — How They Work Together
+### PackML and ISA-88 - How They Work Together
 
 A common source of confusion: PackML and ISA-88 are not alternatives. They solve different problems and run in parallel.
 
-**PackML** manages *machine state* — is the unit idle, starting, executing, or faulted? It answers: "What is the machine doing right now?"
+**PackML** manages *machine state* - is the unit idle, starting, executing, or faulted? It answers: "What is the machine doing right now?"
 
-**ISA-88** manages *recipe execution* — which procedure is running, which phase is active, what parameters apply? It answers: "What is the machine making right now, and how far along is it?"
+**ISA-88** manages *recipe execution* - which procedure is running, which phase is active, what parameters apply? It answers: "What is the machine making right now, and how far along is it?"
 
 In a batch machine (e.g., a brewery mash tun), the PackML state machine governs the unit's lifecycle: Idle → Starting → Execute → Completing → Complete. *Within* the Execute state, ISA-88's procedural model runs the recipe: FillPhase → HeatPhase → HoldPhase → TransferPhase. The PackML state machine provides the container; ISA-88 fills it with process content.
 
-**ILA principle:** Every machine has a PackML state machine. Machines that execute recipes or batch processes *also* implement ISA-88 procedural control inside the Execute state. PackML is mandatory; ISA-88 is applied where the process demands it.
+**ILA principle:** Every machine should have a defined state model. PackML is the default state model unless there is a documented reason to use a site-specific equivalent. Machines that execute recipes or batch processes also implement ISA-88 procedural control inside the executing state.
 
 **Modes:** PackML defines three modes (Automatic, Semi-Automatic, Manual). ISA-88 adds recipe modes (e.g., recipe-controlled vs. operator-controlled phases). Both coexist — the PackML mode governs the machine, while ISA-88 mode governs the procedure. Document both in the PLC and expose both to Layer 3.
 
-### ISA 5.1 — Tag Naming at the Control Layer
+### ISA 5.1 - Tag Naming at the Control Layer
 
 While ISA 5.1 tag naming is introduced at Layer 1 (Field), the Control Layer is where tag names are defined in the PLC program and exposed to every layer above.
 
-**ILA principle:** The GVL (Global Variable List) in the PLC is the master tag registry. Every tag that appears on an HMI screen, in a historian, or in an alarm list must trace back to a defined variable in the Control Layer.
+**ILA principle:** The PLC variable model is the master tag registry for machine behavior. Every HMI tag, alarm tag, historian tag, and recipe status that affects or describes the machine must trace back to a defined Control Layer variable.
 
 **Naming discipline at Layer 2:**
 
@@ -208,7 +222,7 @@ While ISA 5.1 tag naming is introduced at Layer 1 (Field), the Control Layer is 
 
 The Control Layer exposes its tags to higher layers via OPC UA (or equivalent). This is the boundary between Layer 2 and Layers 3/4.
 
-**ILA principle:** The PLC's OPC UA server defines exactly which tags are visible to SCADA and historians. Not every internal PLC variable should be exposed — only those with a clear consumer in Layer 3 or Layer 4.
+**ILA principle:** The PLC's OPC UA server defines exactly which tags are visible to Layer 3 and Layer 4. Not every internal PLC variable should be exposed. Publish only tags with a clear consumer, purpose, and access mode.
 
 **Recommended OPC UA node structure:**
 
@@ -230,10 +244,24 @@ Root
 │       └── BatchID
 ```
 
+## Control-Layer Decisions
+
+Make these decisions explicitly during design review:
+
+| Decision | ILA default |
+|----------|-------------|
+| Machine state model | PackML core states first, optional states when needed |
+| Recipe validation | PLC validates before execution |
+| Process interlocks | PLC or safety PLC, not SCADA |
+| HMI command handling | HMI writes intent; PLC validates and acts |
+| Published data model | OPC UA structure mirrors PLC structure |
+| Safety logic | Safety-rated hardware and reviewed safety design |
+| Reusable device logic | Function blocks with consistent command, feedback, timeout, and fault behavior |
+
 ## Practical Checklist
 
 - [ ] PLC program structure mirrors the physical machine (Rule 5)
-- [ ] PackML state machine is implemented with all relevant states
+- [ ] Machine state model is implemented and documented
 - [ ] Recipe validation happens in the Control Layer, not SCADA (Rule 5)
 - [ ] ISA 5.1 tag naming is enforced in all GVLs
 - [ ] OPC UA server exposes only the tags consumed by Layer 3 and Layer 4
@@ -241,7 +269,8 @@ Root
 - [ ] Function blocks (FB_Cylinder, FB_Motor, etc.) are reusable and version-controlled
 - [ ] Batch control follows ISA-88 models where applicable
 - [ ] Every PLC variable that appears in SCADA or historian has a defined, documented purpose
+- [ ] Exceptions to PackML, naming, or exposure rules are documented with rationale
 
 ---
 
-*Back to [ILA Overview](01-overview.md) | Previous: [Layer 1 — Field](03-layer1-field.md) | Next: [Layer 3 — Supervisory](05-layer3-supervisory.md)*
+*Back to [ILA Overview](ILA-Overview.md) | Previous: [Layer 1 - Field](ILA-Layer1-Field.md) | Next: [Layer 3 - Supervisory](ILA-Layer3-Supervisory.md)*
