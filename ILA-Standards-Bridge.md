@@ -1,149 +1,246 @@
-# ILA Standards Bridge
+# ILA Layer 3 - Supervisory
 
-**What the standard says vs. what ILA decides.**
-
----
-
-## Why This Document Exists
-
-Industrial standards are written to be universally applicable. They define *what* should be achieved but deliberately avoid prescribing *how* — because every plant, every process, and every organization is different. This is a feature, not a bug. Standards need to be broad enough to apply to a refinery and a cookie factory.
-
-The problem: practitioners don't work in abstract, universally applicable environments. They work in specific plants with specific constraints, and they need concrete answers. "The recipe management architecture should be appropriate to the application" is technically correct and practically useless at 2 PM on a Tuesday when you need to decide where to put the recipe validation logic.
-
-ILA exists to fill that gap. It takes the standards seriously — and then makes the decisions that the standards intentionally leave open.
-
-This document maps each key standard to the specific, opinionated positions ILA takes.
+**HMI, SCADA, alarms, operator commands, recipe entry, audit trails, and MES integration points.**
 
 ---
 
-## ISA 5.1 — Instrumentation Symbols and Identification
+## Purpose
 
-**What the standard says:**
+The Supervisory Layer is the operator's window into the process. It displays machine state, captures operator intent, presents alarms, supports recipe entry, records operator actions, and connects production workflows to the control system.
 
-ISA 5.1 provides a system for identifying instruments and their functions. It defines letter codes for measured variables (T = Temperature, P = Pressure, F = Flow) and functional identifiers (I = Indicator, C = Controller, T = Transmitter). It allows for user-defined extensions and does not mandate a specific hierarchical structure beyond the tag number itself.
+This layer is governed most directly by **ILA Rule 2: No process logic in SCADA.**
 
-**What ILA decides:**
+This is the layer where the temptation to add "just a little logic" is greatest — and where the cost of doing so is highest.
 
-ILA enforces a specific hierarchical naming pattern: `{Area}_{Unit}_{DeviceType}{Seq}_{Attribute}`. This goes beyond ISA 5.1's scope — the standard does not require an Area-Unit hierarchy in the tag name itself. ILA does, because the tag name must serve as a physical address that is readable by a maintenance technician, traceable from the PLC through the historian, and consistent across all five layers.
+## What Belongs Here
 
-ILA also decides that tag names are in English — regardless of the plant's location. ISA 5.1 is silent on language. ILA takes the position that tags are a technical coordinate system, not prose, and a universal language prevents confusion in multi-national teams, vendor support interactions, and cross-site standardization.
+- HMI / SCADA runtime screens
+- Alarm management and notification
+- Operator command inputs (start, stop, reset, recipe selection)
+- Recipe entry and parameter display
+- Production dashboards and status overviews
+- MES integration points (work order receipt, production reporting)
+- Audit trails and electronic signatures (where required)
+- Role-based operator access
+- Screen navigation, display formatting, and operator guidance
 
-ILA further decides (Rule 1) that tag naming *is* architecture — meaning that a poorly named tag is an architectural defect, not a cosmetic issue. ISA 5.1 treats naming as documentation. ILA treats it as a structural decision with consequences in every layer.
+## What Does Not Belong Here
+
+- Process logic, conditional branching, or calculations that determine machine behavior
+- Timer-based sequencing or interlock logic
+- Direct field device communication bypassing the Control Layer
+- Data aggregation, trending calculations, or report generation (that is Layer 4)
+- Process-critical values stored only in SCADA without a Control Layer source
+
+## Supervisory Layer Rules
+
+These rules keep HMI and SCADA focused on operators, visibility, and controlled interaction with the machine.
+
+| Rule | Principle | Meaning |
+|------|-----------|---------|
+| R1 | **Design for stress, not comfort** | Operators use HMI screens during faults, changeovers, alarms, and pressure. If the operator has to think too long, the design has already failed. |
+| R2 | **No process logic. Period.** | If a script controls the process, decides equipment state, or replaces PLC sequencing, it breaks the architecture. SCADA may guide, display, validate input, and capture intent; it must not own machine behavior. |
+| R3 | **UI is for operators, not engineers** | If the screen is not understood within seconds by the intended operator, it is bad design. Engineering detail belongs behind the right diagnostic view, not on the main operating screen. |
+| R4 | **Alarms must be actionable** | Alarm fatigue is real and dangerous. Every alarm should be relevant, prioritized, understandable, and tied to an operator response. Otherwise it should not be an alarm. |
+| R5 | **Consistency beats creativity** | Predictable screens reduce errors. Creative one-off layouts, colors, and navigation patterns introduce risk during abnormal situations. |
+
+## ILA Rule 2 - No Process Logic in SCADA
+
+The short version of the rule is "No programming in SCADA." The precise version is: **no process logic in SCADA.**
+
+This distinction matters. Most SCADA systems contain some scripting or configuration logic for navigation, display, validation, and alarm workflows. That is normal. The architectural problem appears when SCADA scripts decide machine behavior.
+
+Process logic hidden in SCADA scripts is:
+
+- **Invisible** — PLC programmers don't see it during code reviews
+- **Fragile** — SCADA runtime updates can break or change script behavior silently
+- **Unmaintainable** — the next engineer doesn't know to look in SCADA for logic
+- **Untestable** — SCADA scripts rarely have structured testing or simulation
+
+**The test is simple:** If you replaced the HMI/SCADA platform, would the machine still operate correctly under PLC control? If the answer is no, process logic has leaked into Layer 3.
+
+**What is allowed in SCADA:**
+
+- Display formatting, including unit conversion for display only
+- Navigation logic (screen changes, popup triggers)
+- User input validation at the UI level (numeric range checks before sending to PLC)
+- Alarm acknowledgment and shelving
+- Audit trail capture and electronic signature workflows
+- Operator guidance and help text
+
+**What is NOT allowed in SCADA:**
+
+- Calculating setpoints or derived values used by the process
+- Conditional logic that determines equipment state or transitions
+- Timer-based operations that affect production
+- Writing directly to field devices (bypassing the PLC)
+- Storing process-critical data only in SCADA (no PLC variable backing it)
+- Retrying work orders indefinitely without exposing the rejection reason
+
+## Key Standards
+
+### ISA-101 - HMI Design
+
+ISA-101 (Human Machine Interfaces for Process Automation Systems) provides guidelines for designing effective, safe, and consistent operator interfaces.
+
+**Core principles relevant to ILA:**
+
+**High-performance HMI design:**
+- Use grayscale backgrounds — color is reserved for abnormal conditions and alarms
+- Avoid decorative 3D graphics (realistic tank drawings, photographic backgrounds)
+- Display process values with context: current value, setpoint, operating range, alarm limits
+- Use analog indicators (bar graphs, trend sparklines) rather than just numeric displays
+- Navigation should follow the physical plant hierarchy, which aligns with Layer 2 structure
+
+**A note on high-performance HMI:** ILA recommends high-performance principles as the default starting point. They reduce visual noise and help operators notice abnormal conditions. If a site intentionally deviates because of operator training, regulatory expectations, or existing standards, document the reason. The problem is not deviation; the problem is accidental inconsistency.
+
+**Screen hierarchy (aligned with Rule 5):**
+
+```
+Level 1: Plant Overview     — All areas, key KPIs, alarm summary
+Level 2: Area Overview      — All units in an area, state and status
+Level 3: Unit Detail        — Single unit, all instruments and controls
+Level 4: Device/Loop Detail — Single control loop, tuning, diagnostics
+```
+
+**ILA principle:** The screen hierarchy maps to the PLC structure. If the PLC has `PRG_Station01`, `PRG_Station02`, and `PRG_Station03`, Layer 3 should have corresponding operator views. No orphan screens. No hidden process logic screens.
+
+### PackML HMI State Visualization
+
+PackML provides a standardized way to display machine state on HMI screens. Every ILA-compliant machine should have a PackML faceplate showing:
+
+- Current state (text and/or color-coded indicator)
+- Available commands (only commands valid for the current state are active)
+- Mode (Automatic / Semi-Automatic / Manual)
+- Key counters (produced, rejected, cycles)
+
+**Command button behavior:**
+
+| Current State | Available Commands |
+|---------------|-------------------|
+| Idle | Start |
+| Execute | Hold, Suspend, Stop |
+| Held | Unhold, Stop |
+| Suspended | Unsuspend, Stop |
+| Complete | Reset |
+| Stopped | Reset |
+| Aborted | Clear |
+
+**ILA principle:** The HMI reads `StateCurrent` from the PLC and displays only valid operator commands for that state. The PLC still validates the command before acting. Button enablement improves usability; it is not the safety or process interlock.
+
+### ISA-88 - Recipe Management at the Supervisory Layer
+
+In ISA-88 batch systems, the Supervisory Layer is responsible for:
+
+- Presenting available recipes to the operator
+- Accepting recipe parameter input
+- Sending recipe parameters to the Control Layer
+- Displaying batch progress and phase status
+- Collecting batch records for Layer 4
+
+**ILA principle (Rule 5 enforcement):** The operator selects and parameterizes a recipe at Layer 3. The recipe is sent to Layer 2, where the PLC validates it before accepting. If the PLC rejects the recipe (missing parameters, out-of-range values), Layer 3 displays the rejection reason. The SCADA never decides if a recipe is valid.
+
+**Workflow:**
+
+```
+Operator selects recipe         -> Layer 3
+Layer 3 sends recipe to PLC     -> Layer 2
+PLC validates recipe            -> Layer 2
+PLC accepts or rejects          -> Layer 2
+Layer 3 displays result         -> Layer 3
+PLC enters Starting state       -> Layer 2, only if accepted
+```
+
+## Alarm Management
+
+Alarm management is a Layer 3 responsibility, but alarm *detection* happens in Layer 2.
+
+**ILA alarm flow:**
+
+1. PLC detects alarm condition (Layer 2)
+2. PLC sets alarm tag to TRUE with priority and description
+3. SCADA reads alarm tag via OPC UA (Layer 3)
+4. SCADA presents alarm to operator with ISA-18.2 attributes
+5. Operator acknowledges alarm at Layer 3
+6. Alarm data is logged in historian (Layer 4)
+
+**ISA-18.2 alarm attributes (managed at Layer 3):**
+
+- Priority (critical, high, medium, low, diagnostic)
+- State (active/cleared, acknowledged/unacknowledged)
+- Shelving (temporary suppression with automatic return)
+- Alarm rationalization documentation
+
+**ILA principle:** Alarm *conditions* are defined in PLC logic (Layer 2). Alarm *presentation*, priority classification, and operator response workflows are managed at Layer 3. Alarm *history* and trending are stored in Layer 4.
+
+## MES Integration
+
+Manufacturing Execution Systems (MES) interface with ILA at Layer 3 as a gateway between shop floor operations and business systems.
+
+**Typical MES data flows:**
+
+| Direction | Data | Example |
+|-----------|------|---------|
+| MES → Layer 3 | Work orders, production schedules | "Produce 1000 units of Product A" |
+| Layer 3 → MES | Production counts, quality data, batch records | "Batch BR001 complete, 998 units produced" |
+
+**ILA principle:** MES integration happens at Layer 3 or Layer 4, never directly to the PLC. Layer 3 translates production intent into operator-visible actions and Control Layer recipe parameters.
+
+**Work order rejection flow:** When the PLC rejects a work order because of an invalid product code, missing recipe, equipment state, or safety condition, the rejection must flow back through Layer 3 to MES with a reason code. MES must not retry indefinitely and hide the root cause.
+
+**ISA-95 activity models:** ISA-95 defines standard activity models for production, quality, maintenance, and inventory operations. When integrating MES at Layer 3, use ISA-95 activity models to structure the data exchange — this makes MES integration vendor-independent and prevents building point-to-point interfaces that break when either system is upgraded.
+
+## Regulated Environments
+
+In regulated industries (pharmaceutical, food safety, medical devices), Layer 3 carries additional responsibilities defined by regulatory frameworks.
+
+**FDA 21 CFR Part 11 - Electronic Records and Signatures:**
+
+When your SCADA system generates electronic records (batch records, quality logs, production reports) or accepts electronic signatures (operator confirmations, recipe approvals), it must comply with 21 CFR Part 11. Key requirements at Layer 3:
+
+- **Audit trails:** Every operator action — recipe change, alarm acknowledgment, manual override — must be logged with timestamp, user identity, old value, new value, and reason for change. The audit trail must be tamper-evident and retained for the required period.
+- **Electronic signatures:** When an operator signs off on a batch or approves a deviation, the signature must be linked to the specific record, include the signer's identity, and record the date/time and meaning of the signature (e.g., "reviewed," "approved," "released").
+- **Access control:** Role-based access must prevent unauthorized changes. An operator who can run the process should not be able to modify recipes. A supervisor who can approve deviations should not be able to delete audit trail entries.
+- **System validation:** The SCADA system must be validated (IQ/OQ/PQ) to demonstrate that it functions as intended and that electronic records are trustworthy.
+
+**ILA principle:** 21 CFR Part 11 compliance is primarily a Layer 3 responsibility. SCADA or MES platforms provide audit trails, signatures, access control, and validation evidence. The PLC enforces process behavior regardless of regulatory context.
+
+Do not bury compliance workflows in PLC logic. Do not allow compliance screens to bypass PLC validation.
+
+## Supervisory Design Decisions
+
+Make these decisions explicit:
+
+| Decision | ILA default |
+|----------|-------------|
+| Machine behavior | Decided in Layer 2 |
+| Operator commands | Captured in Layer 3, validated in Layer 2 |
+| Recipe entry | Entered in Layer 3, accepted or rejected in Layer 2 |
+| Alarm detection | Detected in Layer 2 |
+| Alarm presentation | Managed in Layer 3 |
+| Audit trail | Managed in Layer 3 or MES |
+| MES work order handling | Visible, reason-coded, no silent retry loops |
+
+**Other regulatory frameworks:** GMP (Good Manufacturing Practice), IEC 62304 (medical device software), and EU Annex 11 (computerized systems in pharmaceutical) impose similar requirements. The pattern is the same: audit, authenticate, validate — and keep all of it at Layer 3, not buried in PLC logic.
+
+## Practical Checklist
+
+- [ ] Zero process logic exists in SCADA scripts (Rule 2 - verified by review)
+- [ ] HMI screen hierarchy mirrors the PLC program structure (Rule 5)
+- [ ] PackML faceplate shows current state, available commands, and mode
+- [ ] Command buttons are state-dependent (not always-enabled)
+- [ ] High-performance HMI principles are followed (grayscale, no decorative 3D)
+- [ ] Recipe entry sends parameters to PLC — PLC validates and accepts/rejects (Rule 5)
+- [ ] Alarm detection is in the PLC; alarm presentation and management is in SCADA
+- [ ] All SCADA tags trace back to defined PLC variables (no orphan tags)
+- [ ] If the SCADA platform were replaced, the machine would continue to function
+- [ ] MES work order rejection flows back with reason codes (no silent retries)
+- [ ] *Regulated:* Audit trails capture every operator action with timestamp, user, old/new values
+- [ ] *Regulated:* Electronic signatures are linked to specific records with signer identity
+- [ ] *Regulated:* Role-based access control prevents unauthorized changes
+- [ ] *Regulated:* SCADA system is validated (IQ/OQ/PQ) if generating electronic records
+- [ ] Exceptions are documented where legacy SCADA contains unavoidable behavior
 
 ---
 
-## PackML / ISA-TR88.00.02 — Machine State Model
-
-**What the standard says:**
-
-ISA-TR88.00.02 defines a 17-state model for packaging machines. It specifies the state names, the allowed transitions, and the general purpose of each state. It defines three modes (Automatic, Semi-Automatic, Manual). It does not prescribe which states are mandatory vs. optional, nor does it specify what logic should execute in each state — that is left to the implementer.
-
-**What ILA decides:**
-
-ILA divides the 17 states into 9 core states (Idle, Starting, Execute, Stopping, Stopped, Aborting, Aborted, Clearing, Resetting) and 8 optional states (Hold/Unhold, Suspend/Unsuspend, Completing/Complete). The standard makes no such distinction. ILA does, because implementing all 17 states on a simple pick-and-place machine adds testing surface, HMI complexity, and maintenance burden without process benefit.
-
-ILA decides that recipe validation happens in the Starting state — the PLC confirms that all recipe parameters are valid before transitioning to Execute. The standard does not prescribe this; it merely defines Starting as "the machine is preparing to execute." ILA fills in the specifics: Starting is where the Control Layer exercises Rule 5 by validating input from the Supervisory Layer.
-
-ILA also extends PackML beyond packaging. The standard was written for packaging machines, but ILA applies the state model to any machine — inspection cells, batch reactors, assembly stations. The state model works because the lifecycle (idle → prepare → run → stop → fault) is universal.
-
----
-
-## ISA-88 / IEC 61512 — Batch Control
-
-**What the standard says:**
-
-ISA-88 defines three models: the Physical Model (equipment hierarchy), the Procedural Model (recipe execution hierarchy), and the Process Model (process stages). It defines the separation between master recipes, control recipes, and equipment recipes. It specifies the concept of phases as the smallest unit of procedural control. It does not prescribe where recipe validation occurs, how recipes are transmitted to controllers, or which system has final authority over recipe acceptance.
-
-**What ILA decides:**
-
-ILA decides that the PLC (Layer 2) is the final authority on recipe acceptance. The Supervisory Layer (Layer 3) presents recipes and accepts operator input, but it cannot force a recipe onto the Control Layer. If the PLC rejects a recipe (missing parameters, out-of-range values, wrong equipment mode), that rejection is final until the operator corrects the issue. This is Rule 5 enforcement: the Control Layer dictates structure.
-
-ILA also decides the relationship between ISA-88 and PackML: they are complementary, not competing. PackML manages the machine state lifecycle; ISA-88 manages the recipe execution *within* the Execute state. ISA-88 is silent on machine state management; PackML is silent on recipe execution. ILA connects them explicitly.
-
-ILA maps the ISA-88 Physical Model to ILA tag naming. The Physical Model hierarchy (Area → Process Cell → Unit → Equipment Module → Control Module) directly informs the `{Area}_{Unit}_{DeviceType}` structure. The standard does not make this connection to tag naming — ILA does.
-
----
-
-## ISA-101 — Human Machine Interfaces
-
-**What the standard says:**
-
-ISA-101 establishes a framework for managing HMIs throughout their lifecycle: design, implementation, operation, and maintenance. It covers design philosophy, style guides, alarm integration, and user interface standards. It recommends a structured design process but does not mandate a specific visual style — it explicitly states that the style guide is site-specific.
-
-**What ILA decides:**
-
-ILA recommends high-performance HMI principles as the default. This means grayscale backgrounds, color reserved for abnormal states, analog indicators alongside numeric values, and minimal decorative elements. ISA-101 allows this as one valid approach among many. ILA makes it the starting point, with documented deviations where operator teams have strong, justified preferences for alternative styles.
-
-ILA decides (Rule 2) that HMI screens contain zero process logic. ISA-101 is primarily a design standard and does not explicitly address the boundary between display logic and control logic. ILA draws a hard line: if removing all SCADA scripting would change the machine's behavior, the architecture is wrong. ISA-101 concerns itself with how information is *presented*. ILA concerns itself with ensuring that nothing beyond presentation exists at Layer 3.
-
-ILA decides that the HMI screen hierarchy mirrors the PLC program structure (Rule 5). ISA-101 recommends a logical screen hierarchy but does not tie it to the control system structure. ILA does — because a screen that has no corresponding PLC program is either orphaned or hiding logic that belongs elsewhere.
-
----
-
-## IEC 62443 — Industrial Cybersecurity
-
-**What the standard says:**
-
-IEC 62443 is a comprehensive, multi-part standard covering organizational security (policies, procedures, training), system security (zones, conduits, security levels), and component security (device hardening, secure development). It defines the concept of zones (groups of assets with the same security level) and conduits (controlled communication paths between zones). It defines four Security Levels (SL 1–4). It requires a risk assessment to determine target security levels but does not prescribe specific network topologies or firewall rules.
-
-**What ILA decides:**
-
-ILA maps each of its five layers to an IEC 62443 zone, with Layer 1 and Layer 2 sharing a zone (because they require real-time, low-latency communication). This is a specific architectural decision — IEC 62443 does not dictate zone boundaries; it provides a methodology for determining them through risk assessment. ILA provides a default zone model that works for most industrial environments, with the expectation that high-risk sites may refine the boundaries through formal risk assessment.
-
-ILA decides that firewall rules physically enforce Rule 4 (data flows up, commands flow down). Specifically: Layer 4 (Data) is blocked from writing to Layer 2 (Control) at the network level. IEC 62443 would arrive at a similar conclusion through risk assessment, but ILA makes it an upfront architectural rule — not a finding from an assessment that may or may not be performed.
-
-ILA decides (Rule 3) that the OT team owns and operates the infrastructure. IEC 62443-2-1 addresses organizational responsibilities but does not prescribe whether IT or OT owns the OT network. ILA takes the position that OT owns it — because the people who understand the physical consequences of network decisions must be the people who make those decisions.
-
-ILA also decides that the OT team has final authority over incident response decisions that affect production systems. IEC 62443 requires an incident response capability but does not resolve the IT/OT authority boundary. ILA does: IT advises, OT decides, because only OT understands whether shutting down a system mid-process creates a safety hazard.
-
----
-
-## ISA-95 / IEC 62264 — Enterprise-Control Integration
-
-**What the standard says:**
-
-ISA-95 defines hierarchical levels for enterprise-to-control integration (the Purdue Model: Levels 0–5). It defines activity models for production, quality, maintenance, and inventory operations. It provides the B2MML (Business to Manufacturing Markup Language) data schema for structured data exchange between manufacturing operations and business systems. It defines the boundary between enterprise systems and manufacturing operations at Level 3/4.
-
-**What ILA decides:**
-
-ILA maps its five layers to Purdue levels but is not a 1:1 copy. ILA separates the Data Layer (Layer 4) from the Supervisory Layer (Layer 3), which ISA-95 groups together at Level 3. This separation matters because the data infrastructure has fundamentally different security requirements, operational patterns, and ownership than the SCADA systems. ISA-95 treats Level 3 as a single tier; ILA splits it to enforce clearer boundaries.
-
-ILA decides that MES integration happens at Layer 3 or Layer 4 — never directly to the PLC. ISA-95 defines the data exchange models but does not prohibit direct Level 4-to-Level 2 communication if the risk assessment allows it. ILA prohibits it as an architectural rule, because direct business-system-to-PLC connections create unaudited pathways that bypass operator awareness and Layer 3 validation.
-
-ILA decides that the local historian is always the source of truth, even when data is replicated to cloud platforms. ISA-95 does not address cloud architecture (it predates widespread cloud adoption in manufacturing). ILA fills this gap: cloud is a replica consumer, not an authority. If the cloud says one thing and the local historian says another, the local historian wins.
-
----
-
-## OPC UA / IEC 62541 — Data Exchange
-
-**What the standard says:**
-
-OPC UA defines a platform-independent, service-oriented architecture for secure, reliable data exchange. It supports information modeling (address space with nodes, references, and data types), security (certificate-based authentication, encryption), subscriptions (efficient data change notification), and historical data access. It does not prescribe how the address space should be organized — that is application-specific.
-
-**What ILA decides:**
-
-ILA decides that the OPC UA address space mirrors the PLC program structure and the ILA tag naming hierarchy. The standard allows any node structure; ILA prescribes one: `Root/{Area}/{Unit}/{Attribute}`. This means the OPC UA server is navigable by anyone who understands the ILA naming convention — no separate documentation needed to find a tag.
-
-ILA decides that the PLC is the OPC UA server, and Layers 3 and 4 are clients. The standard supports any topology (server, client, pub/sub, aggregation). ILA constrains it: the source of truth is the PLC, and it serves data upward. Aggregation servers are acceptable at Layer 4, but they aggregate — they do not modify or create new data that is written back down.
-
-ILA decides that OPC UA write access is restricted to Layer 3 (Supervisory) for operator commands only. Layer 4 (Data) has read-only access. The standard's security model supports this through user roles and access control, but it does not mandate it. ILA does — as a direct enforcement of Rule 4.
-
----
-
-## Summary: Where ILA Adds Value
-
-| Standard | Leaves Open | ILA Decides |
-|----------|-------------|-------------|
-| ISA 5.1 | Tag structure and hierarchy | `{Area}_{Unit}_{Device}{Seq}_{Attr}`, English, hierarchical |
-| PackML | Which states to implement, what happens in each | 9 core + 8 optional, recipe validation in Starting |
-| ISA-88 | Where recipe validation occurs, relationship to state model | PLC validates (Rule 5), ISA-88 runs inside PackML Execute |
-| ISA-101 | Visual style, logic boundary | High-performance default, zero logic in SCADA (Rule 2) |
-| IEC 62443 | Zone boundaries, IT/OT ownership | 1:1 layer-to-zone mapping, OT owns the stack (Rule 3) |
-| ISA-95 | Cloud architecture, direct PLC access | Local historian is truth, no direct MES-to-PLC (Rule 4) |
-| OPC UA | Address space structure, access control | Mirrors PLC structure, Layer 4 is read-only (Rule 4) |
-
-The pattern is consistent: **standards define the playing field, ILA makes the calls.** ILA's five rules are the decisions that practitioners would otherwise make inconsistently, implicitly, or not at all — and the cost of not making them is an architecture that nobody can explain, debug, or maintain.
-
----
-
-*Back to [ILA Overview](01-overview.md)*
+*Back to [ILA Overview](ILA-Overview.md) | Previous: [Layer 2 - Control](ILA-Layer2-Control.md) | Next: [Layer 4 - Data](ILA-Layer4-Data.md)*
