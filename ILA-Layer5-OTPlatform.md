@@ -1,16 +1,18 @@
-# ILA Layer 5 — OT Platform
+# ILA Layer 5 - OT Platform
 
-**Network infrastructure, firewalls, AD/LDAP, virtualization, backup — the foundation everything runs on.**
+**Networks, firewalls, identity, virtualization, backup, certificates, time synchronization, patching, monitoring, and incident response.**
 
 ---
 
 ## Purpose
 
-The OT Platform Layer is the infrastructure that enables every other layer to function. It provides the network, the servers, the authentication, and the security boundaries. When this layer is neglected, the entire stack is fragile, insecure, and unmaintainable.
+The OT Platform Layer is the foundation that lets the other layers run securely and recoverably. It provides network segmentation, identity, servers, virtualization, backups, certificates, time, patching, monitoring, and incident response boundaries.
+
+When Layer 5 is neglected, the factory may still run, but it becomes fragile: unknown firewall rules, unpatched servers, shared passwords, no restore tests, no time sync, and no clear authority during incidents.
 
 This layer is governed most directly by **ILA Rule 3: OT owns the stack / Security is everyone's job.**
 
-## What Belongs in Layer 5
+## What Belongs Here
 
 - Network switches, routers, and firewalls (OT-specific)
 - Network segmentation and VLAN design
@@ -22,17 +24,32 @@ This layer is governed most directly by **ILA Rule 3: OT owns the stack / Securi
 - Time synchronization (NTP/PTP)
 - Patch management (OT-appropriate cadence)
 - Certificate management (for OPC UA, HTTPS, VPN)
+- Remote access architecture
+- Logging, monitoring, and incident response tooling
 
-## What Does NOT Belong in Layer 5
+## What Does Not Belong Here
 
 - PLC programs or process logic (that is Layer 2)
 - SCADA applications (that is Layer 3)
 - Historian or database applications (that is Layer 4)
 - Business IT infrastructure (ERP, email, corporate network)
+- Process ownership decisions that belong to operations and engineering
+
+## OT Platform Rules
+
+These rules keep the infrastructure controlled, observable, recoverable, and rebuildable.
+
+| Rule | Principle | Meaning |
+|------|-----------|---------|
+| R1 | **Network segmentation is foundational** | Segmentation is not a finishing touch. It is the prerequisite for controlled traffic, security monitoring, incident containment, and safe integration between layers. |
+| R2 | **Default deny. Always.** | If traffic, access, or remote connectivity is not explicitly required, approved, and documented, it is blocked. Allow rules must be intentional, reviewed, and owned. |
+| R3 | **Backups must be proven, not assumed** | If you have not performed a restore test, you do not have a backup; you have a hope. Restore tests must cover PLC projects, SCADA, historians, VMs, databases, firewall configs, and certificates where applicable. |
+| R4 | **Monitoring is mandatory** | If you do not know what is happening, you have already lost control of the platform. Monitor traffic, authentication, configuration changes, remote access, backups, and critical service health. |
+| R5 | **Everything must be documented and reproducible** | No hidden configurations. No cowboy fixes. Infrastructure must be rebuildable from documented configuration, backups, versioned exports, and known credentials. |
 
 ## Key Standards
 
-### IEC 62443 — Industrial Cybersecurity
+### IEC 62443 - Industrial Cybersecurity
 
 IEC 62443 is the defining standard for OT cybersecurity. It provides a comprehensive framework covering organization, system, and component security across the entire lifecycle.
 
@@ -55,7 +72,7 @@ IEC 62443 defines the concept of *zones* (groups of assets with the same securit
 ┌─────────────────────────────────────────────┐
 │  Enterprise Zone (IT)                       │
 │  ERP, email, business systems               │
-│  ── NOT part of ILA ──                      │
+│  -- NOT part of ILA --                      │
 ├─────────── DMZ / Firewall ──────────────────┤
 │  OT DMZ                                     │
 │  Historian replica, remote access gateway    │
@@ -88,9 +105,9 @@ IEC 62443 defines four security levels:
 | SL 3 | Sophisticated attack with moderate resources | Critical infrastructure, regulated plants |
 | SL 4 | State-sponsored attack | Rarely applied in full; aspirational |
 
-**ILA principle:** Every zone must have a defined target security level. The security level drives decisions about authentication, network controls, monitoring, and hardening within that zone.
+**ILA principle:** Every zone should have a target security level based on risk. ILA provides a default zone model; IEC 62443 risk assessment refines it for the site.
 
-### ISA-95 / IEC 62264 — The Purdue Model
+### ISA-95 / IEC 62264 - The Purdue Model
 
 The Purdue Model (from ISA-95) defines hierarchical levels for enterprise-to-control integration. ILA layers align with but are not identical to Purdue levels.
 
@@ -105,13 +122,13 @@ The Purdue Model (from ISA-95) defines hierarchical levels for enterprise-to-con
 | Level 3.5 | DMZ | Layer 5 (OT Platform) |
 | Level 4-5 | Enterprise (IT) | Outside ILA scope |
 
-**ILA principle:** The Purdue Model provides the network segmentation rationale. ILA adds practical guidance for what goes in each zone and how layers communicate across boundaries.
+**ILA principle:** The Purdue Model provides segmentation rationale. ILA adds practical guidance for what belongs in each zone and how layers communicate across boundaries.
 
 ## Network Design
 
 ### VLAN Design
 
-Every ILA layer should be on its own VLAN (or set of VLANs for larger plants). Inter-VLAN traffic is controlled by a firewall — not just a router.
+Every ILA layer should have an intentional network boundary. In mature environments this usually means separate VLANs or zones with firewall control. In smaller environments, the first step may be documenting existing traffic and separating the highest-risk paths before redesigning the whole network.
 
 **Recommended VLAN structure:**
 
@@ -123,7 +140,7 @@ Every ILA layer should be on its own VLAN (or set of VLANs for larger plants). I
 | 40 | Layer 5 | Infrastructure services | 10.10.40.0/24 |
 | 99 | DMZ | IT/OT boundary | 10.10.99.0/24 |
 
-**ILA principle:** Layer 1 (field devices) and Layer 2 (PLCs) share a network segment because they need real-time, low-latency communication. All other layers are separated by firewall rules.
+**ILA principle:** Layer 1 and Layer 2 often share a control zone because field devices and PLCs need deterministic, low-latency communication. Layer 3, Layer 4, infrastructure services, and external access should be separated and controlled.
 
 **Firewall rules follow ILA data flow (Rule 4):**
 
@@ -132,13 +149,13 @@ Every ILA layer should be on its own VLAN (or set of VLANs for larger plants). I
 | Layer 3 (SCADA) | Layer 2 (PLC) | Down | OPC UA (write commands) |
 | Layer 2 (PLC) | Layer 3 (SCADA) | Up | OPC UA (tag reads, subscriptions) |
 | Layer 2 (PLC) | Layer 4 (Historian) | Up | OPC UA (tag reads) |
-| Layer 4 (Historian) | Layer 2 (PLC) | **Blocked** | No writes from Layer 4 to Layer 2 |
+| Layer 4 (Historian) | Layer 2 (PLC) | **Blocked** | No command writes from Layer 4 to Layer 2 |
 | Layer 4 (Data) | DMZ | Up | Controlled data replication |
 | Enterprise IT | Layer 2 | **Blocked** | Never direct IT-to-PLC access |
 
 ### IP Address Scheme
 
-**ILA principle:** Use a consistent IP addressing scheme that makes any device's layer and purpose identifiable from its IP address.
+**ILA principle:** Use a consistent IP addressing scheme that makes a device's site, zone, and purpose easier to identify. IP addresses support the asset inventory; they do not replace it.
 
 **Pattern:** `10.{site}.{layer*10}.{device}`
 
@@ -172,17 +189,17 @@ Every ILA layer should be on its own VLAN (or set of VLANs for larger plants). I
 | Robots | 1 | Proprietary auth, no LDAP support |
 | Field devices | 1 | No auth capability or local only |
 
-**ILA principle:** Where centralized auth is not possible, document the local credentials securely, enforce password policies, and include these devices in security audits. This is an honest reflection of real OT environments — not every device supports AD integration, and pretending otherwise is dishonest.
+**ILA principle:** Where centralized authentication is not possible, manage local credentials deliberately. This is normal in OT. Pretending every PLC, robot, drive, or field device supports enterprise identity creates blind spots.
 
 **Practical solutions for non-AD devices:**
 
-For the PLCs, robots, and field devices that cannot join Active Directory, use a Privileged Access Management (PAM) solution or a credential vault (e.g., CyberArk, HashiCorp Vault, or even a well-secured KeePass database as a minimum). The key requirements: credentials are stored encrypted, access is logged, and passwords are rotated on a defined schedule. No shared sticky notes on the HMI cabinet. No default passwords left from commissioning.
+For PLCs, robots, and field devices that cannot join Active Directory, use a PAM solution or credential vault where possible. For smaller sites, a well-controlled encrypted vault is better than a spreadsheet or shared commissioning password. The key requirements are encrypted storage, access control, change logging, and a defined rotation process.
 
 For larger installations with hundreds of non-AD devices, consider a dedicated OT credential management workflow: a spreadsheet is not sufficient at scale. The PAM solution should support scheduled password rotation with change logging, role-based access (maintenance sees different credentials than engineering), break-glass procedures for emergency access during outages, and integration with your change management process.
 
 ## Virtualization
 
-Virtualization is standard practice in modern OT. SCADA servers, historians, databases, and engineering workstations run as VMs on a shared hypervisor.
+Virtualization is standard practice in modern OT, but it must be operated like production infrastructure. SCADA servers, historians, databases, domain controllers, and engineering workstations can run as VMs when latency, supportability, backup, and recovery requirements are understood.
 
 **What should be virtualized:**
 
@@ -195,14 +212,14 @@ Virtualization is standard practice in modern OT. SCADA servers, historians, dat
 
 - PLCs and safety controllers (Layer 2 — dedicated hardware)
 - Field devices (Layer 1 — physical)
-- Firewalls (dedicated appliance recommended; virtual firewall acceptable for lab/dev)
+- Firewalls in production, unless the site has a validated virtual firewall architecture
 
 **Backup strategy:**
 
-- Full VM snapshots on a defined schedule (daily or before changes)
+- Full VM backups or snapshots on a defined schedule
 - Backup storage on a separate physical device or NAS
-- Retain at least 3 rotation generations
-- Test restores periodically — a backup you have never restored is not a backup
+- Retain enough restore points to cover operational and ransomware scenarios
+- Test restores periodically — a backup that has never been restored is only a hope
 
 ## Time Synchronization
 
@@ -223,15 +240,15 @@ GPS / NTP external source
 
 ## Patch Management
 
-OT patching follows a different cadence than IT. Unplanned downtime from a bad patch is as damaging as a security breach.
+OT patching follows a different risk profile than IT patching. A bad patch that stops production can be as damaging as an unpatched vulnerability. That does not mean "never patch"; it means patch deliberately.
 
 **ILA patching principles:**
 
-- Patch OT systems on a quarterly or semi-annual cycle, not monthly
+- Patch OT systems on a risk-based cadence, commonly quarterly or semi-annually
 - Test all patches in a staging/lab environment before production deployment
 - Coordinate patches with planned maintenance windows
 - Document all patches applied, including rollback procedures
-- Prioritize patches for internet-facing or DMZ systems
+- Prioritize internet-facing, remote-access, and DMZ systems
 - Legacy systems that cannot be patched must have compensating controls (network isolation, enhanced monitoring)
 
 ## OT Monitoring and Anomaly Detection
@@ -246,9 +263,9 @@ Prevention alone is not sufficient. IEC 62443 assumes breach will happen — det
 - **Configuration changes:** PLC program downloads, firmware updates, firewall rule changes. All must be logged and correlated with authorized change windows.
 - **USB and removable media:** Detect USB device insertions on engineering workstations and HMI terminals.
 
-**Tools:** OT-specific monitoring platforms (Claroty, Nozomi Networks, Dragos) provide passive network monitoring purpose-built for industrial protocols. For smaller environments, a combination of firewall logging, Syslog aggregation, and Wireshark-based audits provides baseline visibility. The key is that *something* is watching — not that it is expensive.
+**Tools:** OT-specific monitoring platforms provide passive visibility for industrial protocols. Smaller environments can start with firewall logging, Syslog, asset inventory, switch monitoring, and periodic packet captures. The key is that someone can answer: what normally talks to what, and what changed?
 
-**ILA principle:** OT monitoring is a Layer 5 responsibility. Monitoring agents must never impact real-time control performance. Use passive/span-port monitoring for control network traffic — never inline inspection that could add latency to PLC communication.
+**ILA principle:** OT monitoring is a Layer 5 responsibility. Monitoring must not endanger real-time control performance. Prefer passive or span-port monitoring for control networks. Be careful with inline inspection where latency or failure modes could affect production.
 
 ## Incident Response
 
@@ -256,9 +273,9 @@ When a security incident occurs — a detected breach, a ransomware infection, a
 
 **ILA incident response principles:**
 
-**Who decides:** The OT team has final authority over the decision to take production systems offline. IT security may advise, but the OT team understands the physical consequences of shutting down a process mid-cycle (e.g., a furnace that cannot be safely stopped, a chemical batch that will be ruined). This decision authority must be agreed with IT *before* an incident, not negotiated during one.
+**Who decides:** The OT team has final authority over decisions that affect production state. IT security may advise, but OT understands the physical consequences of stopping a process mid-cycle. This authority must be agreed before an incident, not negotiated during one.
 
-**Isolation, not shutdown:** The first response to a suspected network breach is to isolate the affected zone at the firewall — not to power off PLCs or abort running processes. Layer 2 devices should continue to operate safely in isolation while the incident is investigated.
+**Isolation, not panic shutdown:** The first response to a suspected network breach is usually to isolate affected zones, not power off PLCs or abort running processes without understanding the physical consequence. Layer 2 should continue operating safely where possible.
 
 **Evidence preservation:** Do not reimage or reboot affected systems before capturing forensic evidence. Take VM snapshots, export firewall logs, and preserve network captures. Coordinate with your incident response team or external forensic specialists.
 
@@ -275,6 +292,18 @@ For organizations operating multiple plants, Layer 5 must address standardizatio
 **Network design across sites:** Each site maintains its own OT network with its own firewall and DMZ. Inter-site communication for data replication (historian to cloud, cross-site dashboards) flows through site DMZs — never direct site-to-site OT network connections. Use site-to-site VPN or SD-WAN through the DMZ tier only.
 
 **Centralized vs. distributed AD:** For multi-site environments, decide whether to run a single AD forest with site-specific domain controllers, or independent AD domains per site. ILA recommends site-local domain controllers at minimum — if the WAN link goes down, the site must continue to authenticate users locally.
+
+## Minimum Viable Layer 5
+
+Not every site can implement a mature IEC 62443 program on day one. Start with controls that reduce the most operational risk:
+
+| Level | Minimum outcome |
+|-------|-----------------|
+| Basic | Asset inventory, network diagram, unique accounts where possible, known backups, documented remote access |
+| Standard | Layered VLANs/zones, firewall rules, centralized identity, tested restores, NTP, patch windows |
+| Advanced | IEC 62443 zone/conduit model, OT monitoring, PAM, certificate lifecycle, incident exercises, multi-site standards |
+
+The goal is not to buy tools. The goal is to make the OT environment understandable, recoverable, and governable.
 
 ## Practical Checklist
 
@@ -297,7 +326,9 @@ For organizations operating multiple plants, Layer 5 must address standardizatio
 - [ ] *Multi-site:* Tag naming includes site prefix for cross-site consistency
 - [ ] *Multi-site:* Each site has local AD domain controllers for WAN-independent auth
 - [ ] *Multi-site:* Inter-site data flows through DMZ only — no direct OT-to-OT links
+- [ ] Minimum viable controls are defined for smaller or legacy sites
+- [ ] Exceptions are risk-reviewed and time-bound where possible
 
 ---
 
-*Back to [ILA Overview](01-overview.md) | Previous: [Layer 4 — Data](06-layer4-data.md)*
+*Back to [ILA Overview](ILA-Overview.md) | Previous: [Layer 4 - Data](ILA-Layer4-Data.md)*
