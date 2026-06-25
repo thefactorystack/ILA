@@ -1,106 +1,111 @@
-# ILA Getting Started — Your First Machine
+# ILA Getting Started - Your First Machine
 
-**A step-by-step walkthrough of ILA applied to a single machine, from field device to network segment.**
+**A practical walkthrough of ILA applied to one inspection cell, from field device naming to firewall rules.**
 
 ---
 
 ## Who This Document Is For
 
-You have read the [ILA Overview](01-overview.md). You understand the five layers and the five rules. Now you want to see what it looks like in practice — on a real machine, with real tags, real PLC code, and real network decisions.
+Start here if you understand the five ILA layers but want to see what they look like on a real machine.
 
-This document walks through a single machine: an inspection cell called **IC01**. It has a camera, a cylinder, a reject chute, and a conveyor. Simple enough to understand in one sitting. Complex enough to exercise all five ILA layers.
+The example is intentionally small: one inspection cell called **IC01**. It has a conveyor, a stopper cylinder, a camera, a reject diverter, sensors, and an e-stop. That is enough to exercise all five layers without turning the document into a full project manual.
 
-## The Machine: Inspection Cell 01 (IC01)
+This is not the only valid implementation. It is a reference pattern: copy the structure, then adapt the details to your PLC platform, SCADA system, network standards, and safety requirements.
 
-**What it does:** Parts arrive on a conveyor. A sensor detects a part. A cylinder stops the part. A camera inspects the part. If the part passes, the cylinder retracts and the part continues. If the part fails, a diverter sends it to the reject bin.
+## The Machine: Inspection Cell 01
+
+Parts arrive on a conveyor. A photoelectric sensor detects a part. A stopper cylinder holds the part in place. A camera inspects it. Passing parts continue downstream. Failed parts are diverted to a reject bin.
 
 **Physical equipment:**
 
-- 1 conveyor motor (VFD-driven)
-- 1 part-present sensor (photoelectric)
-- 1 stopper cylinder (pneumatic, double-acting)
-- 1 inspection camera (smart camera with Ethernet interface)
-- 1 reject diverter cylinder (pneumatic)
-- 1 reject bin full sensor
-- 1 safety e-stop
+| Quantity | Device | Notes |
+|----------|--------|-------|
+| 1 | Conveyor motor | VFD-driven |
+| 1 | Part-present sensor | Photoelectric |
+| 1 | Stopper cylinder | Pneumatic, double-acting |
+| 1 | Inspection camera | Smart camera, Ethernet interface |
+| 1 | Reject diverter cylinder | Pneumatic |
+| 1 | Reject bin full sensor | Photoelectric or limit switch |
+| 1 | E-stop | Safety-rated input |
 
-## Layer 1 — Name Every Device
+## Layer 1 - Name Every Device
 
-Before writing a single line of PLC code, name every field device using the ILA tag naming pattern: `{Area}_{Unit}_{DeviceType}{Seq}_{Attribute}`.
+Before writing PLC code, name the field devices. The goal is not pretty tags. The goal is traceability.
 
-The area is `IC01` (Inspection Cell 01). Each device gets a unit or device code:
+**Pattern:** `{Area}_{Unit}_{DeviceType}{Seq}_{Attribute}`
 
-| Physical Device | Tag Base | Attributes |
-|----------------|----------|------------|
-| Conveyor motor | `IC01_CONV01` | `CmdRun`, `FbkRunning`, `SpeedRef`, `SpeedAct` |
+For this example, `IC01` is the area/unit identifier for Inspection Cell 01.
+
+| Physical device | Tag base | Example attributes |
+|-----------------|----------|--------------------|
+| Conveyor motor | `IC01_CONV01` | `CmdRun`, `FbkRunning`, `SpeedRef`, `SpeedAct`, `Fault` |
 | Part-present sensor | `IC01_PE01` | `Status` |
-| Stopper cylinder | `IC01_CYL01` | `CmdExtend`, `CmdRetract`, `FbkExtended`, `FbkRetracted` |
-| Inspection camera | `IC01_CAM01` | `TriggerReq`, `TriggerAck`, `InspResult`, `InspComplete` |
-| Reject diverter | `IC01_CYL02` | `CmdExtend`, `CmdRetract`, `FbkExtended`, `FbkRetracted` |
+| Stopper cylinder | `IC01_CYL01` | `CmdExtend`, `CmdRetract`, `FbkExtended`, `FbkRetracted`, `Timeout` |
+| Inspection camera | `IC01_CAM01` | `ProgramID`, `ProgramLoaded`, `TriggerReq`, `TriggerAck`, `InspResult`, `InspComplete`, `Fault` |
+| Reject diverter | `IC01_CYL02` | `CmdExtend`, `CmdRetract`, `FbkExtended`, `FbkRetracted`, `Timeout` |
 | Reject bin sensor | `IC01_PE02` | `BinFull` |
-| E-stop | `IC01_ES01` | `Status` |
+| E-stop | `IC01_ES01` | `Status`, `Tripped` |
 
-**What you have now:** Every device has a name that tells you where it is (IC01), what it is (CYL01), and what the signal means (FbkExtended). A maintenance technician can read `IC01_CYL02_FbkRetracted` and walk directly to the reject diverter in Inspection Cell 01 to check the retracted position sensor. No drawings needed at 3 AM.
+**Field-layer test:** Can a maintenance technician read `IC01_CYL02_FbkRetracted` and know where to walk and what to inspect? If not, the tag name is not doing its job.
 
-**Test yourself:** Can you look at any tag in the list above and know where to physically walk to find the device? If yes, your naming works. If no, revise until it does.
+## Layer 2 - Structure the PLC Program
 
-## Layer 2 — Structure the PLC Program
+The PLC structure mirrors the machine structure. For IC01, keep the program small but explicit:
 
-The PLC program structure mirrors the physical machine. IC01 is one machine, so it gets one application with a clear structure:
-
-```
+```text
 Project: TheFactoryStack_IC01
 ├── Application
 │   ├── TaskConfig
 │   │   └── MainTask (10 ms cycle)
 │   ├── Programs
-│   │   ├── PRG_Main            — Calls everything, handles mode selection
-│   │   ├── PRG_PackML          — State machine (core 9 states to start)
-│   │   └── PRG_InspSequence    — Inspection cycle sequence
+│   │   ├── PRG_Main             - Calls machine logic and handles mode selection
+│   │   ├── PRG_PackML           - Machine state model
+│   │   └── PRG_InspSequence     - Inspection cycle sequence
 │   ├── Function Blocks
-│   │   ├── FB_Cylinder         — Reusable: cmd, fbk, timeout, fault
-│   │   └── FB_Motor            — Reusable: cmd, fbk, speed, fault
+│   │   ├── FB_Cylinder          - Command, feedback, timeout, fault handling
+│   │   ├── FB_Motor             - Command, feedback, speed, fault handling
+│   │   └── FB_CameraHandshake   - Program select, trigger, complete, fault, timeout
 │   └── GVL
-│       ├── GVL_IO              — Physical IO mapping (ISA 5.1 names)
-│       ├── GVL_PackML          — StateCurrent, CmdStart, CmdStop, etc.
-│       ├── GVL_HMI             — Variables exposed to Layer 3
-│       └── GVL_Recipe          — RecipeID, PartType, ToleranceLimits
+│       ├── GVL_IO               - Physical I/O mapping
+│       ├── GVL_PackML           - State, mode, commands, status
+│       ├── GVL_HMI              - Variables exposed to Layer 3
+│       ├── GVL_Recipe           - Recipe and inspection parameters
+│       └── GVL_Faults           - Fault bits, codes, and descriptions
 ```
 
-**PackML state machine (start with core states):**
+### PackML State Model
 
-For this simple machine, implement the 9 core states. You do not need Hold/Suspend yet — add them later if the machine needs to pause for upstream/downstream conditions.
+Start with the nine core states: `Idle`, `Starting`, `Execute`, `Stopping`, `Stopped`, `Aborting`, `Aborted`, `Clearing`, and `Resetting`.
+
+Add `Hold` or `Suspend` only when the process needs controlled pause/resume behavior. Do not implement all 17 states just to look complete; every state adds HMI, test, and maintenance surface.
 
 ```iec-st
 CASE StateCurrent OF
     STATE_IDLE:
-        // Conveyor stopped, cylinder retracted, camera idle
         IF CmdStart AND RecipeValid THEN
             StateCurrent := STATE_STARTING;
         END_IF
 
     STATE_STARTING:
-        // Validate recipe (Rule 5): does the recipe ID exist?
-        // Does the camera have the correct inspection program loaded?
-        IF bRecipeLoaded AND bCameraReady THEN
+        // Rule 5: the PLC validates that the recipe and camera program are usable.
+        IF bRecipeLoaded AND bCameraReady AND (CameraProgramLoaded = RecipeCameraProgramID) THEN
             StateCurrent := STATE_EXECUTE;
         ELSIF bStartTimeout THEN
-            StartFaultReason := 'Recipe or camera not ready';
+            FaultCode := FAULT_START_CONDITION_NOT_MET;
             StateCurrent := STATE_ABORTING;
         END_IF
 
     STATE_EXECUTE:
-        // Call PRG_InspSequence — the actual inspection cycle
         PRG_InspSequence();
         IF CmdStop THEN
             StateCurrent := STATE_STOPPING;
-        ELSIF bFault THEN
+        ELSIF FaultActive THEN
             StateCurrent := STATE_ABORTING;
         END_IF
 
     STATE_STOPPING:
-        // Complete current inspection cycle, then stop conveyor
-        IF bCycleDone AND NOT CONV01_FbkRunning THEN
+        IC01_CONV01_CmdRun := FALSE;
+        IF bCycleDone AND NOT IC01_CONV01_FbkRunning THEN
             StateCurrent := STATE_STOPPED;
         END_IF
 
@@ -110,13 +115,15 @@ CASE StateCurrent OF
         END_IF
 
     STATE_RESETTING:
-        // Retract all cylinders, clear fault flags, reset counters
+        // Return actuators to a known state before going back to Idle.
         IF bResetDone THEN
             StateCurrent := STATE_IDLE;
         END_IF
 
     STATE_ABORTING:
-        // Immediate safe stop: stop conveyor, retract cylinders
+        IC01_CONV01_CmdRun := FALSE;
+        IC01_CYL01_CmdExtend := FALSE;
+        IC01_CYL02_CmdExtend := FALSE;
         IF bAbortDone THEN
             StateCurrent := STATE_ABORTED;
         END_IF
@@ -127,18 +134,20 @@ CASE StateCurrent OF
         END_IF
 
     STATE_CLEARING:
-        // Clear fault registers, prepare for reset
         IF bClearDone THEN
             StateCurrent := STATE_STOPPED;
         END_IF
 END_CASE
 ```
 
-**Inspection sequence (called from Execute):**
+### Inspection Sequence
+
+The sequence runs only inside `Execute`. Real projects should implement command latching, timeout handling, and fault reset in reusable function blocks; the sample below shows the structure.
 
 ```iec-st
 CASE iSeqStep OF
     0: // Wait for part
+        IC01_CONV01_CmdRun := TRUE;
         IF IC01_PE01_Status THEN
             iSeqStep := 10;
         END_IF
@@ -147,173 +156,186 @@ CASE iSeqStep OF
         IC01_CYL01_CmdExtend := TRUE;
         IF IC01_CYL01_FbkExtended THEN
             iSeqStep := 20;
+        ELSIF IC01_CYL01_Timeout THEN
+            FaultCode := FAULT_STOPPER_EXTEND_TIMEOUT;
+            FaultActive := TRUE;
         END_IF
 
     20: // Trigger camera
         IC01_CAM01_TriggerReq := TRUE;
         IF IC01_CAM01_InspComplete THEN
             IC01_CAM01_TriggerReq := FALSE;
-            IF IC01_CAM01_InspResult THEN  // TRUE = pass
+            IF IC01_CAM01_InspResult THEN
                 iSeqStep := 30;
             ELSE
                 iSeqStep := 40;
             END_IF
+        ELSIF IC01_CAM01_Fault THEN
+            FaultCode := FAULT_CAMERA_INSPECTION;
+            FaultActive := TRUE;
         END_IF
 
-    30: // Pass — release part
+    30: // Pass - release part
         IC01_CYL01_CmdExtend := FALSE;
         IC01_CYL01_CmdRetract := TRUE;
-        iPartsPassed := iPartsPassed + 1;
         IF IC01_CYL01_FbkRetracted THEN
+            iPartsPassed := iPartsPassed + 1;
             iSeqStep := 0;
         END_IF
 
-    40: // Fail — divert to reject
-        IC01_CYL02_CmdExtend := TRUE;  // Open diverter
-        IC01_CYL01_CmdExtend := FALSE; // Release stopper
-        iPartsRejected := iPartsRejected + 1;
+    40: // Fail - divert to reject
+        IC01_CYL02_CmdExtend := TRUE;
+        IC01_CYL01_CmdExtend := FALSE;
+        IC01_CYL01_CmdRetract := TRUE;
         IF IC01_CYL01_FbkRetracted THEN
+            iPartsRejected := iPartsRejected + 1;
             iSeqStep := 50;
         END_IF
 
     50: // Reset diverter
+        IC01_CYL02_CmdExtend := FALSE;
         IC01_CYL02_CmdRetract := TRUE;
         IF IC01_CYL02_FbkRetracted THEN
-            IC01_CYL02_CmdExtend := FALSE;
             IC01_CYL02_CmdRetract := FALSE;
             iSeqStep := 0;
         END_IF
 END_CASE
 ```
 
-**Rule 5 in action:** The recipe is validated in the Starting state. The camera program is confirmed loaded before production begins. The SCADA can send any recipe it wants — the PLC decides if it is valid.
+**Rule 5 in action:** SCADA can send a requested recipe. The PLC decides whether it is valid for the machine state, camera program, and equipment readiness.
 
-**OPC UA exposure:** Define which tags Layer 3 and Layer 4 need:
+### OPC UA Exposure
 
-```
+Expose only the variables that Layer 3 and Layer 4 need. Internal sequence variables, temporary calculations, and implementation details should stay internal unless there is a clear operational reason to publish them.
+
+```text
 Root/IC01/
 ├── PackML/
-│   ├── StateCurrent          → Layer 3 (HMI state display)
-│   ├── CmdStart              → Layer 3 (operator button)
-│   ├── CmdStop               → Layer 3 (operator button)
-│   ├── CmdReset              → Layer 3 (operator button)
-│   └── CmdClear              → Layer 3 (operator button)
+│   ├── StateCurrent          -> Layer 3 (state display), Layer 4 (OEE)
+│   ├── ModeCurrent           -> Layer 3
+│   ├── CmdStart              -> Layer 3 write
+│   ├── CmdStop               -> Layer 3 write
+│   ├── CmdReset              -> Layer 3 write
+│   └── CmdClear              -> Layer 3 write
 ├── Production/
-│   ├── PartsPassed           → Layer 3 + Layer 4
-│   ├── PartsRejected         → Layer 3 + Layer 4
-│   └── CycleTime             → Layer 4 (historian trending)
+│   ├── PartsPassed           -> Layer 3 + Layer 4
+│   ├── PartsRejected         -> Layer 3 + Layer 4
+│   └── CycleTimeMs           -> Layer 4
 ├── Recipe/
-│   ├── ActiveRecipeID        → Layer 3 + Layer 4
-│   ├── RecipeValid           → Layer 3 (display)
-│   └── PartType              → Layer 4 (batch record)
+│   ├── RequestedRecipeID     -> Layer 3 write
+│   ├── ActiveRecipeID        -> Layer 3 + Layer 4
+│   ├── RecipeValid           -> Layer 3
+│   └── RejectReason          -> Layer 3 + Layer 4
 └── Faults/
-    ├── FaultActive           → Layer 3 (alarm)
-    └── FaultCode             → Layer 3 + Layer 4
+    ├── FaultActive           -> Layer 3
+    ├── FaultCode             -> Layer 3 + Layer 4
+    └── FaultText             -> Layer 3
 ```
 
-## Layer 3 — Build the Operator Interface
+## Layer 3 - Build the Operator Interface
 
-The HMI for IC01 follows the screen hierarchy dictated by the PLC structure (Rule 5):
+The HMI follows the PLC structure. It does not invent its own model of the machine.
 
-**Screen 1: Area Overview** — Shows IC01 as a single machine tile with state indicator (color-coded), parts passed/rejected counters, and active alarm count. If you had multiple cells (IC01, IC02, IC03), each would be a tile on this screen.
+| Screen | Purpose |
+|--------|---------|
+| Area Overview | Shows IC01 as one machine tile with state, production counts, and active alarms |
+| IC01 Detail | Shows PackML faceplate, device status, camera result, counters, and active recipe |
+| IC01 Recipe | Lets an operator select a recipe and send it to the PLC for validation |
+| IC01 Faults | Shows active and recent PLC-detected faults with operator guidance |
 
-**Screen 2: IC01 Detail** — The main operator screen. Shows the PackML faceplate (current state, available command buttons), live status of each device (CYL01 extended/retracted, camera last result), production counters, and active recipe.
-
-**Screen 3: IC01 Recipe Entry** — Allows operator to select and parameterize a recipe (part type, tolerance limits, camera program). When the operator hits "Send to PLC," the recipe parameters are written to the PLC's recipe GVL via OPC UA. The screen then shows whether the PLC accepted or rejected the recipe — and if rejected, *why*.
-
-**Rule 2 verification:** Remove all SCADA scripting from IC01's screens. Does the machine still run? If you replaced the entire SCADA platform with a different vendor's product, would IC01 still inspect parts? If yes, Rule 2 is satisfied.
+**Rule 2 verification:** Remove all SCADA scripts that affect machine behavior. If IC01 can still inspect parts under PLC control, Layer 3 is doing the right job.
 
 **Alarm list for IC01:**
 
-| Alarm Tag | Priority | Description |
-|-----------|----------|-------------|
-| `IC01_CYL01_Timeout` | High | Stopper cylinder did not reach position in time |
-| `IC01_CYL02_Timeout` | High | Reject diverter did not reach position in time |
-| `IC01_CAM01_Fault` | High | Camera communication fault |
-| `IC01_PE02_BinFull` | Medium | Reject bin full — operator must empty |
-| `IC01_ES01_Tripped` | Critical | E-stop activated |
-| `IC01_PackML_StartFault` | Medium | Recipe validation failed during Starting |
+| Alarm tag | Priority | Detected in | Description |
+|-----------|----------|-------------|-------------|
+| `IC01_CYL01_Timeout` | High | PLC | Stopper cylinder did not reach position in time |
+| `IC01_CYL02_Timeout` | High | PLC | Reject diverter did not reach position in time |
+| `IC01_CAM01_Fault` | High | PLC | Camera communication or inspection fault |
+| `IC01_PE02_BinFull` | Medium | PLC | Reject bin full |
+| `IC01_ES01_Tripped` | Critical | Safety system / PLC | E-stop activated |
+| `IC01_PackML_StartFault` | Medium | PLC | Recipe, camera, or start condition failed |
 
-Every alarm is *detected* in the PLC (Layer 2) and *presented* at Layer 3. The SCADA does not decide what constitutes a fault — it only displays and manages what the PLC reports.
+SCADA presents and manages alarms. It does not decide what a process fault is.
 
-## Layer 4 — Store and Trend the Data
+## Layer 4 - Store and Trend the Data
 
-**Historian configuration:**
+Connect the historian to the IC01 OPC UA server or to an approved aggregation service. The historian is a read-only consumer of control data.
 
-Connect the historian to IC01's OPC UA server. Subscribe to the following tags with the exact same names as the PLC:
-
-| Historian Tag | Source | Storage Rate | Purpose |
-|---------------|--------|-------------|---------|
-| `IC01_PackML_StateCurrent` | OPC UA | On change | OEE state tracking |
-| `IC01_Production_PartsPassed` | OPC UA | On change | Production counting |
-| `IC01_Production_PartsRejected` | OPC UA | On change | Quality tracking |
-| `IC01_Production_CycleTime` | OPC UA | Every cycle | Performance trending |
-| `IC01_Recipe_ActiveRecipeID` | OPC UA | On change | Batch record |
+| Historian tag | Source | Storage trigger | Purpose |
+|---------------|--------|-----------------|---------|
+| `IC01_PackML_StateCurrent` | OPC UA | On change | OEE and state analysis |
+| `IC01_Production_PartsPassed` | OPC UA | On change | Production count |
+| `IC01_Production_PartsRejected` | OPC UA | On change | Quality count |
+| `IC01_Production_CycleTimeMs` | OPC UA | Every cycle | Performance trend |
+| `IC01_Recipe_ActiveRecipeID` | OPC UA | On change | Batch and quality context |
 | `IC01_Faults_FaultCode` | OPC UA | On change | Downtime analysis |
 
-**Rule 5 in action:** The historian folder structure is `IC01/PackML/`, `IC01/Production/`, `IC01/Recipe/`, `IC01/Faults/` — identical to the OPC UA node structure, which is identical to the PLC GVL structure. One name, one structure, from PLC to historian.
+**Rule 4 in action:** Layer 4 reads. It does not write setpoints, commands, recipe changes, or reset bits to the PLC.
 
-**Rule 4 in action:** The historian reads these tags. It never writes to them. No historian-driven setpoint changes. No dashboard-triggered commands.
-
-**SQL batch record (one row per inspected part):**
+**Example inspection log:**
 
 ```sql
 CREATE TABLE IC01_InspectionLog (
     LogID           INT IDENTITY PRIMARY KEY,
-    Timestamp       DATETIME DEFAULT GETDATE(),
-    RecipeID        VARCHAR(50),
-    PartType        VARCHAR(50),
-    InspResult      BIT,            -- 1 = pass, 0 = fail
-    CycleTimeMs     INT,
-    BatchID         VARCHAR(50)
+    TimestampUtc    DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+    RecipeID        VARCHAR(50) NOT NULL,
+    PartType        VARCHAR(50) NULL,
+    InspResult      BIT NOT NULL,
+    CycleTimeMs     INT NULL,
+    FaultCode       VARCHAR(50) NULL,
+    BatchID         VARCHAR(50) NULL
 );
 ```
 
-## Layer 5 — Give It a Network Home
+## Layer 5 - Give It a Network Home
 
-**VLAN assignment:**
+For a small cell, Layer 1 and Layer 2 often share a control VLAN because the PLC, drives, camera, and IO need low-latency communication. Supervisory, data, and infrastructure services should be separated and firewalled where the site architecture supports it.
 
-| Device | IP Address | VLAN | Layer |
-|--------|-----------|------|-------|
-| IC01 PLC | 10.1.10.101 | VLAN 10 (Control) | 2 |
-| IC01 Camera | 10.1.10.201 | VLAN 10 (Control) | 1 |
-| SCADA Server | 10.1.20.10 | VLAN 20 (Supervisory) | 3 |
-| Historian | 10.1.30.10 | VLAN 30 (Data) | 4 |
-| AD Server | 10.1.40.10 | VLAN 40 (Infrastructure) | 5 |
-| OT Firewall | 10.1.40.1 | All VLANs | 5 |
+| Device | IP address | VLAN | ILA layer |
+|--------|------------|------|-----------|
+| IC01 PLC | `10.1.10.101` | VLAN 10 Control | 2 |
+| IC01 Camera | `10.1.10.201` | VLAN 10 Control | 1 |
+| SCADA Server | `10.1.20.10` | VLAN 20 Supervisory | 3 |
+| Historian | `10.1.30.10` | VLAN 30 Data | 4 |
+| OT AD / LDAP | `10.1.40.10` | VLAN 40 Infrastructure | 5 |
+| OT Firewall | `10.1.40.1` | Routed boundary | 5 |
 
-**Firewall rules for IC01:**
+**Example firewall rules:**
 
-| Source | Destination | Port | Protocol | Allow/Deny |
-|--------|-------------|------|----------|------------|
-| SCADA (10.1.20.10) | PLC (10.1.10.101) | 4840 | OPC UA | Allow |
-| Historian (10.1.30.10) | PLC (10.1.10.101) | 4840 | OPC UA (read only) | Allow |
-| PLC (10.1.10.101) | Camera (10.1.10.201) | 8080 | HTTP/API | Allow |
-| Historian (10.1.30.10) | PLC (10.1.10.101) | Any | Write | **Deny** |
-| Enterprise IT | PLC (10.1.10.101) | Any | Any | **Deny** |
+| Source | Destination | Port | Protocol | Decision |
+|--------|-------------|------|----------|----------|
+| SCADA | IC01 PLC | 4840 | OPC UA | Allow read and approved command writes |
+| Historian | IC01 PLC | 4840 | OPC UA | Allow read only |
+| IC01 PLC | IC01 Camera | Vendor-specific | Camera API / industrial protocol | Allow required control traffic |
+| Historian | IC01 PLC | Any | Write commands | Deny |
+| Enterprise IT | IC01 PLC | Any | Any | Deny direct access |
 
-**Rule 4 enforced by firewall:** Even if someone misconfigures the historian to write a tag to the PLC, the firewall blocks it. The architecture prevents the violation at the network level — not just the policy level.
+The firewall should enforce the same architecture the documents describe. Policy without enforcement becomes tribal knowledge.
 
 ## What You Have Now
 
-After completing this walkthrough, IC01 is an ILA-compliant machine:
+After this walkthrough, IC01 has an ILA-shaped architecture:
 
-- **Layer 1:** Every device has an ISA 5.1-compliant tag name that doubles as a physical address
-- **Layer 2:** PLC program structure mirrors the physical machine. PackML state machine manages lifecycle. Recipe validation happens in the PLC, not SCADA (Rule 5)
-- **Layer 3:** HMI displays state, accepts commands, shows alarms — contains zero logic (Rule 2)
-- **Layer 4:** Historian stores data with identical tag names and folder structure. Data flows up only (Rule 4)
-- **Layer 5:** Network segmentation places each layer in its own VLAN. Firewall rules enforce data flow direction
+- **Layer 1:** Devices have names that work as physical coordinates.
+- **Layer 2:** PLC structure mirrors the machine and owns state, sequence, interlocks, and recipe validation.
+- **Layer 3:** HMI displays state, captures operator intent, and presents alarms without owning process behavior.
+- **Layer 4:** Historian and database store process data as read-only consumers.
+- **Layer 5:** Network and access rules support the intended data and command flows.
 
-**The one-machine test:** If your organization decides to adopt ILA, start with one machine. Apply the five rules. See if the next engineer who touches it can understand the structure without a walkthrough. If they can, ILA is working. Scale from there.
+## The One-Machine Test
+
+Apply ILA to one machine. Then ask a technician, a PLC engineer, a SCADA engineer, and an OT infrastructure person to explain how the machine works using the same tag names and structure. If they can do it without a whiteboard archaeology session, ILA is working.
 
 ## Next Steps
 
-- Add a second machine (IC02) and see how the naming, SCADA hierarchy, and historian structure scale
-- Implement Hold/Suspend states when IC01 integrates with upstream/downstream equipment
-- Add ISA-88 recipe management if IC01 needs to run multiple product variants with different inspection parameters
-- Set up OEE calculation in the historian using PackML state data
-- Conduct a Rule 2 audit: remove all SCADA scripting and verify the machine still runs
+- Add a second machine, `IC02`, and test whether the naming and HMI hierarchy scale.
+- Add `Hold` or `Suspend` only when upstream/downstream behavior requires it.
+- Add ISA-88 recipe structure if product variants or batch records require it.
+- Use PackML state history to calculate OEE in Layer 4.
+- Run a Rule 2 audit: find every SCADA script and classify it as display, navigation, validation, or process logic.
+- Document any exception to the five rules with its reason, risk, and owner.
 
 ---
 
-*Back to [ILA Overview](01-overview.md)*
+*Back to [ILA Overview](ILA-Overview.md)*
