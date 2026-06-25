@@ -1,4 +1,4 @@
-# ILA Getting Started - Your First Machine
+# ILA Getting Started - Your First Machine.
 
 **A practical walkthrough of ILA applied to one inspection cell, from field device naming to firewall rules.**
 
